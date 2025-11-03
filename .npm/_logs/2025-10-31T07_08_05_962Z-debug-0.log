@@ -1,0 +1,27 @@
+0 verbose cli /home/dlrjsgml0611/.nvm/versions/node/v22.21.0/bin/node /home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@10.9.4
+2 info using node@v22.21.0
+3 silly config load:file:/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/npmrc
+4 silly config load:file:/memora/.npmrc
+5 silly config load:file:/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/etc/npmrc
+6 verbose title npm exec tailwindcss -i app/globals.css -o /memora/out.css
+7 verbose argv "exec" "--" "tailwindcss" "-i" "app/globals.css" "-o" "/memora/out.css"
+8 verbose logfile logs-max:10 dir:/memora/.npm/_logs/2025-10-31T07_08_05_962Z-
+9 verbose logfile /memora/.npm/_logs/2025-10-31T07_08_05_962Z-debug-0.log
+10 silly logfile done cleaning log files
+11 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EAI_AGAIN
+12 silly packumentCache heap:2107637760 maxSize:526909440 maxEntrySize:263454720
+13 verbose stack Error: could not determine executable to run
+13 verbose stack     at getBinFromManifest (/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/node_modules/libnpmexec/lib/get-bin-from-manifest.js:17:23)
+13 verbose stack     at exec (/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/node_modules/libnpmexec/lib/index.js:202:15)
+13 verbose stack     at async Npm.exec (/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/lib/npm.js:207:9)
+13 verbose stack     at async module.exports (/home/dlrjsgml0611/.nvm/versions/node/v22.21.0/lib/node_modules/npm/lib/cli/entry.js:74:5)
+14 verbose pkgid tailwindcss@4.1.16
+15 error could not determine executable to run
+16 verbose cwd /memora
+17 verbose os Linux 5.15.0-60-generic
+18 verbose node v22.21.0
+19 verbose npm  v10.9.4
+20 verbose exit 1
+21 verbose code 1
+22 error A complete log of this run can be found in: /memora/.npm/_logs/2025-10-31T07_08_05_962Z-debug-0.log
