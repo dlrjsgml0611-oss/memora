@@ -1,9 +1,14 @@
 import mongoose from 'mongoose';
 
+// In production, MONGODB_URI must be set
+if (!process.env.MONGODB_URI && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: MONGODB_URI environment variable must be set in production');
+}
+
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/memora';
 
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable');
+if (!process.env.MONGODB_URI && process.env.NODE_ENV !== 'production') {
+  console.warn('⚠️  MONGODB_URI not set. Using fallback (localhost - development only).');
 }
 
 interface MongooseCache {

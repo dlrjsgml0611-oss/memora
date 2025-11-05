@@ -108,12 +108,12 @@ export default function StatsPage() {
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-600">총 복습한 카드</span>
-                <span className="font-semibold">{stats.cardsReviewed || 0}개</span>
+                <span className="font-semibold">{stats.cardsReviewed || 0}개 / 목표 1000개</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-blue-600 h-3 rounded-full"
-                  style={{ width: `${Math.min((stats.cardsReviewed || 0) / 100 * 100, 100)}%` }}
+                  className="bg-blue-600 h-3 rounded-full transition-all"
+                  style={{ width: `${Math.min(((stats.cardsReviewed || 0) / 1000) * 100, 100)}%` }}
                 />
               </div>
             </div>

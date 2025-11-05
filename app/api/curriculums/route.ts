@@ -24,8 +24,16 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
+
+    if (isNaN(page) || page < 1) {
+      return errorResponse('Invalid page parameter', 400);
+    }
+
+    if (isNaN(limit) || limit < 1 || limit > 100) {
+      return errorResponse('Invalid limit parameter (must be 1-100)', 400);
+    }
 
     const total = await Curriculum.countDocuments({ userId: authUser.userId });
     const curriculums = await Curriculum.find({ userId: authUser.userId })

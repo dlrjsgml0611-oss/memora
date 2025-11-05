@@ -14,11 +14,18 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
-  const [startTime, setStartTime] = useState<number>(0);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     loadDueCards();
   }, []);
+
+  useEffect(() => {
+    // Start timer when card is displayed
+    if (cards.length > 0 && currentIndex < cards.length) {
+      setStartTime(Date.now());
+    }
+  }, [currentIndex, cards.length]);
 
   const loadDueCards = async () => {
     try {
@@ -35,14 +42,13 @@ export default function ReviewPage() {
 
   const handleShowAnswer = () => {
     setShowAnswer(true);
-    setStartTime(Date.now());
   };
 
   const handleRating = async (rating: 1 | 2 | 3 | 4) => {
     if (!cards[currentIndex] || reviewing) return;
 
     setReviewing(true);
-    const responseTime = Date.now() - startTime;
+    const responseTime = startTime ? Date.now() - startTime : 0;
 
     try {
       await api.submitReview(cards[currentIndex]._id, rating, responseTime);
@@ -203,7 +209,7 @@ export default function ReviewPage() {
                     <div className="text-xl text-gray-900 whitespace-pre-wrap">
                       {currentCard.back}
                       <div className="mt-3 text-base text-green-600 font-semibold">
-                        ✓ 정답: {currentCard.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ')}
+                        ✓ 정답: {currentCard.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ') || 'N/A'}
                       </div>
                     </div>
                   ) : (

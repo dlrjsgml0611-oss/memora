@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const period = searchParams.get('period') || '7'; // days
-    const periodDays = parseInt(period);
+    const periodDays = parseInt(period, 10);
+
+    if (isNaN(periodDays) || periodDays < 1) {
+      return errorResponse('Invalid period parameter', 400);
+    }
 
     // Get user
     const user = await User.findById(authUser.userId);
