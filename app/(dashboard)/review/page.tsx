@@ -10,6 +10,7 @@ export default function ReviewPage() {
   const [cards, setCards] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
@@ -56,6 +57,7 @@ export default function ReviewPage() {
       if (currentIndex < cards.length - 1) {
         setCurrentIndex(currentIndex + 1);
         setShowAnswer(false);
+        setShowHint(false);
       } else {
         // Session complete
         setCards([]);
@@ -153,19 +155,62 @@ export default function ReviewPage() {
             <CardContent className="space-y-6">
               {/* Question */}
               <div className="bg-gray-50 p-8 rounded-lg border border-gray-200">
-                <div className="text-sm text-gray-600 mb-2">질문</div>
-                <div className="text-xl font-medium text-gray-900 whitespace-pre-wrap">
-                  {currentCard.front}
+                <div className="text-sm text-gray-600 mb-2">
+                  {currentCard.type === 'cloze' ? '빈칸 채우기' : '질문'}
+                </div>
+
+                {/* Image card with image */}
+                {currentCard.type === 'image' && currentCard.front.includes('[IMG]') && (
+                  <div className="mb-4">
+                    <img
+                      src={currentCard.front.match(/\[IMG\](.*?)\[\/IMG\]/)?.[1] || ''}
+                      alt="Question"
+                      className="max-w-full h-64 object-contain rounded border border-gray-300 mx-auto"
+                      onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                    />
+                  </div>
+                )}
+
+                <div className={`text-xl font-medium text-gray-900 whitespace-pre-wrap ${
+                  currentCard.type === 'code' ? 'font-mono' : ''
+                }`}>
+                  {currentCard.type === 'cloze'
+                    ? currentCard.front.replace(/\{\{(.*?)\}\}/g, '___________')
+                    : currentCard.type === 'image'
+                    ? currentCard.front.replace(/\[IMG\].*?\[\/IMG\]\n?/, '')
+                    : currentCard.front
+                  }
                 </div>
               </div>
+
+              {/* Hint Section */}
+              {!showAnswer && showHint && currentCard.hint && (
+                <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
+                  <div className="text-sm text-yellow-600 mb-2 font-semibold">💡 힌트</div>
+                  <div className="text-gray-700">{currentCard.hint}</div>
+                </div>
+              )}
 
               {/* Answer */}
               {showAnswer ? (
                 <div className="bg-blue-50 p-8 rounded-lg border border-blue-200">
                   <div className="text-sm text-blue-600 mb-2">답변</div>
-                  <div className="text-xl text-gray-900 whitespace-pre-wrap">
-                    {currentCard.back}
-                  </div>
+                  {currentCard.type === 'code' ? (
+                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
+                      <code>{currentCard.back}</code>
+                    </pre>
+                  ) : currentCard.type === 'cloze' ? (
+                    <div className="text-xl text-gray-900 whitespace-pre-wrap">
+                      {currentCard.back}
+                      <div className="mt-3 text-base text-green-600 font-semibold">
+                        ✓ 정답: {currentCard.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ')}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xl text-gray-900 whitespace-pre-wrap">
+                      {currentCard.back}
+                    </div>
+                  )}
                   {currentCard.hint && (
                     <div className="mt-4 pt-4 border-t border-blue-200">
                       <div className="text-sm text-blue-600">힌트</div>
@@ -174,10 +219,22 @@ export default function ReviewPage() {
                   )}
                 </div>
               ) : (
-                <div className="text-center">
-                  <Button onClick={handleShowAnswer} size="lg">
-                    답변 확인하기
-                  </Button>
+                <div className="text-center space-y-3">
+                  {currentCard.hint && !showHint && (
+                    <Button
+                      onClick={() => setShowHint(true)}
+                      variant="outline"
+                      size="lg"
+                      className="border-yellow-300 text-yellow-600 hover:bg-yellow-50"
+                    >
+                      💡 힌트 보기
+                    </Button>
+                  )}
+                  <div>
+                    <Button onClick={handleShowAnswer} size="lg">
+                      답변 확인하기
+                    </Button>
+                  </div>
                 </div>
               )}
 

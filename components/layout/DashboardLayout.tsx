@@ -45,8 +45,10 @@ export default function DashboardLayout({
     { href: '/review', label: '복습하기', icon: '📝' },
     { href: '/flashcards', label: '플래시카드', icon: '🗂️' },
     { href: '/curriculums', label: '커리큘럼', icon: '📚' },
+    { href: '/concepts', label: '개념 라이브러리', icon: '💡' },
     { href: '/mindmap', label: '마인드맵', icon: '🧠' },
     { href: '/memory-palace', label: '기억의 궁전', icon: '🏛️' },
+    { href: '/ai-mnemonics', label: 'AI 기억술', icon: '🤖' },
     { href: '/stats', label: '통계', icon: '📈' },
     { href: '/settings', label: '설정', icon: '⚙️' },
   ];

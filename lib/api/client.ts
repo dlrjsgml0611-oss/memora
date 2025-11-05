@@ -35,6 +35,11 @@ async function apiRequest<T = ApiResponse<any>>(
     headers,
   });
 
+  // Handle 204 No Content response (e.g., DELETE requests)
+  if (response.status === 204) {
+    return { success: true } as T;
+  }
+
   const data = await response.json();
 
   if (!response.ok) {
@@ -138,6 +143,23 @@ export const api = {
   deleteCurriculum: (id: string) =>
     apiRequest(`/api/curriculums/${id}`, {
       method: 'DELETE',
+    }),
+
+  // Concepts
+  getConcepts: (params?: { page?: number; limit?: number; search?: string; curriculumId?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.search) query.set('search', params.search);
+    if (params?.curriculumId) query.set('curriculumId', params.curriculumId);
+
+    return apiRequest(`/api/concepts?${query.toString()}`);
+  },
+
+  createConcept: (data: { curriculumId: string; topicTitle: string; aiModel?: string }) =>
+    apiRequest('/api/concepts', {
+      method: 'POST',
+      body: JSON.stringify(data),
     }),
 
   // Mindmaps

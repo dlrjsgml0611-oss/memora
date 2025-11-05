@@ -114,8 +114,8 @@ export default function MindmapPage() {
     }
   };
 
-  const handleNodeUpdate = async (nodeId: string, data: { name: string; image?: string }) => {
-    if (!selectedMindmap) return;
+  const updateMindmapBackend = async (updatedStructure: MindMapNode) => {
+    if (!selectedMindmap) return false;
 
     try {
       const response = await fetch(`/api/mindmaps/${selectedMindmap._id}`, {
@@ -125,58 +125,117 @@ export default function MindmapPage() {
           'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
         },
         body: JSON.stringify({
-          structure: selectedMindmap.structure,
+          structure: updatedStructure,
         }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        // Update the local state with the new structure
+        // Update the local state with the new structure from backend
         const updatedMindmaps = mindmaps.map(m =>
           m._id === selectedMindmap._id ? result.data : m
         );
         setMindmaps(updatedMindmaps);
         setSelectedMindmap(result.data);
+        return true;
       } else {
         alert('업데이트에 실패했습니다: ' + result.error);
+        return false;
       }
     } catch (error) {
       console.error('Failed to update mindmap:', error);
       alert('업데이트에 실패했습니다');
+      return false;
     }
+  };
+
+  const handleNodeUpdate = async (nodeId: string, data: { name: string; image?: string }) => {
+    if (!selectedMindmap) return;
+
+    // Update the structure locally first
+    const updateNodeRecursive = (node: MindMapNode): MindMapNode => {
+      if (node.id === nodeId) {
+        return { ...node, ...data };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: node.children.map(updateNodeRecursive)
+        };
+      }
+      return node;
+    };
+
+    const updatedStructure = updateNodeRecursive(selectedMindmap.structure);
+
+    // Update in backend
+    await updateMindmapBackend(updatedStructure);
   };
 
   const handleNodeDelete = async (nodeId: string) => {
     if (!selectedMindmap) return;
 
-    try {
-      const response = await fetch(`/api/mindmaps/${selectedMindmap._id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
-        },
-        body: JSON.stringify({
-          structure: selectedMindmap.structure,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        const updatedMindmaps = mindmaps.map(m =>
-          m._id === selectedMindmap._id ? result.data : m
-        );
-        setMindmaps(updatedMindmaps);
-        setSelectedMindmap(result.data);
-      } else {
-        alert('삭제에 실패했습니다: ' + result.error);
+    // Delete the node locally first
+    const deleteNodeRecursive = (node: MindMapNode): MindMapNode | null => {
+      if (node.id === nodeId) {
+        return null;
       }
-    } catch (error) {
-      console.error('Failed to delete node:', error);
-      alert('삭제에 실패했습니다');
+      if (node.children) {
+        const filteredChildren = node.children
+          .map(deleteNodeRecursive)
+          .filter((child): child is MindMapNode => child !== null);
+        return {
+          ...node,
+          children: filteredChildren.length > 0 ? filteredChildren : undefined
+        };
+      }
+      return node;
+    };
+
+    const updatedStructure = deleteNodeRecursive(selectedMindmap.structure);
+
+    if (updatedStructure) {
+      // Update in backend
+      await updateMindmapBackend(updatedStructure);
     }
+  };
+
+  const handleNodeAdd = async (parentId: string, nodeName: string) => {
+    if (!selectedMindmap) return;
+
+    // Create new node
+    const newNode: MindMapNode = {
+      id: `node-${Date.now()}`,
+      name: nodeName,
+    };
+
+    // Add node locally first
+    const addNodeRecursive = (node: MindMapNode): MindMapNode => {
+      if (node.id === parentId) {
+        return {
+          ...node,
+          children: [...(node.children || []), newNode]
+        };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: node.children.map(addNodeRecursive)
+        };
+      }
+      return node;
+    };
+
+    const updatedStructure = addNodeRecursive(selectedMindmap.structure);
+
+    // Update in backend
+    await updateMindmapBackend(updatedStructure);
+  };
+
+  const handlePositionUpdate = async (updatedStructure: MindMapNode) => {
+    // Update position in backend (debounce could be added here for better performance)
+    await updateMindmapBackend(updatedStructure);
   };
 
   const handleExport = () => {
@@ -321,7 +380,7 @@ export default function MindmapPage() {
                       <div>
                         <CardTitle>{selectedMindmap.title}</CardTitle>
                         <CardDescription>
-                          노드를 클릭하여 선택하고, 드래그하여 이동하세요
+                          노드를 클릭하여 선택하고, 드래그하여 위치를 조정하세요
                         </CardDescription>
                       </div>
                       <Button variant="outline" onClick={handleExport}>
@@ -336,6 +395,8 @@ export default function MindmapPage() {
                       height={600}
                       onNodeUpdate={handleNodeUpdate}
                       onNodeDelete={handleNodeDelete}
+                      onNodeAdd={handleNodeAdd}
+                      onPositionUpdate={handlePositionUpdate}
                     />
                     <div className="mt-4 p-4 bg-blue-50 rounded-lg">
                       <h4 className="font-semibold text-sm text-gray-900 mb-2">

@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'memora-auth-storage',
+      name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

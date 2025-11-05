@@ -27,13 +27,29 @@ const EMOJI_LIST = [
 
 export default function EditNodeModal({ node, onClose, onSave, onDelete, canDelete = true }: EditNodeModalProps) {
   const [name, setName] = useState(node.name);
-  const [selectedEmoji, setSelectedEmoji] = useState(node.image || '');
-  const [customImage, setCustomImage] = useState('');
+
+  // Determine if initial image is emoji or URL
+  const isInitialImageEmoji = node.image && node.image.length <= 2;
+  const [selectedEmoji, setSelectedEmoji] = useState(isInitialImageEmoji ? node.image : '');
+  const [customImage, setCustomImage] = useState(isInitialImageEmoji ? '' : (node.image || ''));
+
+  // 키보드 단축키 처리
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose();
+    } else if (e.key === 'Enter' && e.ctrlKey) {
+      handleSave();
+    }
+  };
 
   const handleSave = () => {
+    if (!name.trim()) {
+      alert('노드 이름을 입력하세요');
+      return;
+    }
     onSave(node.id, {
-      name,
-      image: selectedEmoji || customImage,
+      name: name.trim(),
+      image: selectedEmoji || customImage || undefined,
     });
     onClose();
   };
@@ -46,11 +62,16 @@ export default function EditNodeModal({ node, onClose, onSave, onDelete, canDele
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onKeyDown={handleKeyDown}
+    >
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white">
         <CardHeader>
           <CardTitle className="text-gray-900">노드 편집</CardTitle>
-          <CardDescription className="text-gray-600">노드의 이름과 이미지를 수정하세요</CardDescription>
+          <CardDescription className="text-gray-600">
+            노드의 이름과 이미지를 수정하세요 (Ctrl+Enter: 저장, Esc: 취소)
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           {/* 노드 이름 */}

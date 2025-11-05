@@ -15,9 +15,11 @@ export default function CurriculumDetailPage() {
   const [generatingFlashcards, setGeneratingFlashcards] = useState<string | null>(null);
   const [concepts, setConcepts] = useState<{ [key: string]: any }>({});
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
+  const [generationMode, setGenerationMode] = useState<'encyclopedia' | 'conversational'>('conversational');
 
   useEffect(() => {
     loadCurriculum();
+    loadExistingConcepts();
   }, [params.id]);
 
   const loadCurriculum = async () => {
@@ -30,6 +32,23 @@ export default function CurriculumDetailPage() {
       console.error('Failed to load curriculum:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadExistingConcepts = async () => {
+    try {
+      const response: any = await api.getConcepts({ curriculumId: params.id as string, limit: 100 });
+      if (response.success && response.data) {
+        // 개념들을 title 기반으로 매핑 (나중에 topic과 매칭)
+        const conceptsMap: { [key: string]: any } = {};
+        response.data.forEach((concept: any) => {
+          // concept의 title을 키로 사용
+          conceptsMap[concept.title] = concept;
+        });
+        setConcepts(conceptsMap);
+      }
+    } catch (error) {
+      console.error('Failed to load existing concepts:', error);
     }
   };
 
@@ -47,25 +66,31 @@ export default function CurriculumDetailPage() {
           curriculumId: curriculum._id,
           topicTitle,
           aiModel: curriculum.aiModel,
+          mode: generationMode,
         }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // 생성된 개념을 state에 저장
+        // 생성된 개념을 state에 저장 (title을 키로 사용)
         setConcepts(prev => ({
           ...prev,
-          [topicId]: data.data
+          [topicTitle]: data.data
         }));
         // 자동으로 확장
         setExpandedTopic(topicId);
       } else {
         alert('개념 생성에 실패했습니다: ' + (data.error || '알 수 없는 오류'));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate concept:', error);
-      alert('개념 생성에 실패했습니다');
+      const errorMessage = error.message || '개념 생성에 실패했습니다';
+      if (errorMessage.includes('timeout') || errorMessage.includes('fetch')) {
+        alert('요청 시간이 초과되었습니다. AI 생성에는 시간이 걸릴 수 있습니다. 잠시 후 다시 시도해주세요.');
+      } else {
+        alert('개념 생성에 실패했습니다: ' + errorMessage);
+      }
     } finally {
       setGeneratingConcept(null);
     }
@@ -160,6 +185,38 @@ export default function CurriculumDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Generation Mode Selector */}
+        <Card>
+          <CardHeader>
+            <CardTitle>개념 생성 모드</CardTitle>
+            <CardDescription>개념 설명을 생성하는 방식을 선택하세요</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-3">
+              <Button
+                variant={generationMode === 'conversational' ? 'default' : 'outline'}
+                onClick={() => setGenerationMode('conversational')}
+                className="flex-1"
+              >
+                <div className="text-left">
+                  <div className="font-semibold">구술식 설명</div>
+                  <div className="text-xs opacity-80">학습과 기억 전문가가 풀어서 설명하듯이 생성</div>
+                </div>
+              </Button>
+              <Button
+                variant={generationMode === 'encyclopedia' ? 'default' : 'outline'}
+                onClick={() => setGenerationMode('encyclopedia')}
+                className="flex-1"
+              >
+                <div className="text-left">
+                  <div className="font-semibold">백과사전식 설명</div>
+                  <div className="text-xs opacity-80">형식적이고 정확한 정의 중심으로 생성</div>
+                </div>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Modules */}
         <div className="space-y-4">
           <h2 className="text-2xl font-bold text-gray-900">학습 모듈</h2>
@@ -191,13 +248,13 @@ export default function CurriculumDetailPage() {
                             {curriculum.progress.completedTopics.includes(topic.topicId) && (
                               <span className="text-xs text-green-600">✓ 완료</span>
                             )}
-                            {concepts[topic.topicId] && (
+                            {concepts[topic.title] && (
                               <span className="text-xs text-blue-600 ml-2">💡 개념 생성됨</span>
                             )}
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          {concepts[topic.topicId] && (
+                          {concepts[topic.title] && (
                             <Button
                               size="sm"
                               variant="ghost"
@@ -212,32 +269,32 @@ export default function CurriculumDetailPage() {
                             onClick={() => handleGenerateConcept(topic.topicId, topic.title)}
                             disabled={generatingConcept === topic.topicId}
                           >
-                            {generatingConcept === topic.topicId ? '생성 중...' : concepts[topic.topicId] ? '재생성' : '개념 설명'}
+                            {generatingConcept === topic.topicId ? 'AI 생성 중... (최대 2분)' : concepts[topic.title] ? '재생성' : '개념 설명'}
                           </Button>
                         </div>
                       </div>
 
                       {/* 개념 내용 표시 영역 */}
-                      {expandedTopic === topic.topicId && concepts[topic.topicId] && (
+                      {expandedTopic === topic.topicId && concepts[topic.title] && (
                         <div className="p-6 bg-white border-t border-gray-200">
                           <div className="prose max-w-none">
                             <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                              {concepts[topic.topicId].title}
+                              {concepts[topic.title].title}
                             </h3>
                             <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                              {concepts[topic.topicId].content.text}
+                              {concepts[topic.title].content.text}
                             </div>
-                            {concepts[topic.topicId].content.code && (
+                            {concepts[topic.title].content.code && (
                               <pre className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
-                                <code>{concepts[topic.topicId].content.code}</code>
+                                <code>{concepts[topic.title].content.code}</code>
                               </pre>
                             )}
                           </div>
                           <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex gap-2 text-xs text-gray-500">
-                              <span>AI 모델: {concepts[topic.topicId].aiGenerated?.model}</span>
+                              <span>AI 모델: {concepts[topic.title].aiGenerated?.model}</span>
                               <span>•</span>
-                              <span>생성 시각: {new Date(concepts[topic.topicId].aiGenerated?.generatedAt || concepts[topic.topicId].createdAt).toLocaleString('ko-KR')}</span>
+                              <span>생성 시각: {new Date(concepts[topic.title].aiGenerated?.generatedAt || concepts[topic.title].createdAt).toLocaleString('ko-KR')}</span>
                             </div>
                           </div>
                         </div>

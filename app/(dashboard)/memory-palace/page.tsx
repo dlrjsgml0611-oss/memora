@@ -14,6 +14,9 @@ interface MemoryItem {
   content: string;
   position: { x: number; y: number };
   image?: string;
+  shape?: 'box' | 'sphere' | 'cylinder' | 'pyramid' | 'card';
+  size?: 'small' | 'medium' | 'large';
+  color?: string;
 }
 
 interface Room {
@@ -183,7 +186,14 @@ export default function MemoryPalacePage() {
     setPalaces(palaces.map(p => p._id === updatedPalace._id ? updatedPalace : p));
   };
 
-  const handleUpdateItem = async (roomId: string, itemId: string, data: { content: string; image?: string }) => {
+  const handleUpdateItem = async (roomId: string, itemId: string, data: {
+    content?: string;
+    image?: string;
+    position?: { x: number; y: number };
+    shape?: 'box' | 'sphere' | 'cylinder' | 'pyramid' | 'card';
+    size?: 'small' | 'medium' | 'large';
+    color?: string;
+  }) => {
     if (!selectedPalace) return;
 
     const updatedRooms = selectedPalace.rooms.map((room: Room) => {
@@ -225,6 +235,134 @@ export default function MemoryPalacePage() {
       if (!result.success) {
         alert('업데이트에 실패했습니다: ' + result.error);
         // Optionally revert the optimistic update here
+      }
+    } catch (error) {
+      console.error('Failed to update memory palace:', error);
+      alert('업데이트에 실패했습니다');
+    }
+  };
+
+  const handleAddRoom = async (room: { name: string; description: string; color: string }) => {
+    if (!selectedPalace) return;
+
+    const newRoom: Room = {
+      id: `room-${Date.now()}`,
+      name: room.name,
+      description: room.description,
+      color: room.color,
+      items: [],
+    };
+
+    const updatedRooms = [...selectedPalace.rooms, newRoom];
+    const updatedPalace = {
+      ...selectedPalace,
+      rooms: updatedRooms,
+    };
+
+    // Update local state immediately
+    setSelectedPalace(updatedPalace);
+    setPalaces(palaces.map(p => p._id === updatedPalace._id ? updatedPalace : p));
+
+    // Persist to backend
+    try {
+      const response = await fetch(`/api/memory-palaces/${selectedPalace._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
+        },
+        body: JSON.stringify({
+          rooms: updatedRooms,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert('업데이트에 실패했습니다: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Failed to update memory palace:', error);
+      alert('업데이트에 실패했습니다');
+    }
+  };
+
+  const handleUpdateRoom = async (roomId: string, data: { name?: string; description?: string; color?: string }) => {
+    if (!selectedPalace) return;
+
+    const updatedRooms = selectedPalace.rooms.map((room: Room) =>
+      room.id === roomId ? { ...room, ...data } : room
+    );
+
+    const updatedPalace = {
+      ...selectedPalace,
+      rooms: updatedRooms,
+    };
+
+    // Update local state immediately
+    setSelectedPalace(updatedPalace);
+    setPalaces(palaces.map(p => p._id === updatedPalace._id ? updatedPalace : p));
+
+    // Persist to backend
+    try {
+      const response = await fetch(`/api/memory-palaces/${selectedPalace._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
+        },
+        body: JSON.stringify({
+          rooms: updatedRooms,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert('업데이트에 실패했습니다: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Failed to update memory palace:', error);
+      alert('업데이트에 실패했습니다');
+    }
+  };
+
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!selectedPalace) return;
+
+    const updatedRooms = selectedPalace.rooms.filter((room: Room) => room.id !== roomId);
+
+    if (updatedRooms.length === 0) {
+      alert('마지막 방은 삭제할 수 없습니다');
+      return;
+    }
+
+    const updatedPalace = {
+      ...selectedPalace,
+      rooms: updatedRooms,
+    };
+
+    // Update local state immediately
+    setSelectedPalace(updatedPalace);
+    setPalaces(palaces.map(p => p._id === updatedPalace._id ? updatedPalace : p));
+
+    // Persist to backend
+    try {
+      const response = await fetch(`/api/memory-palaces/${selectedPalace._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
+        },
+        body: JSON.stringify({
+          rooms: updatedRooms,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert('업데이트에 실패했습니다: ' + result.error);
       }
     } catch (error) {
       console.error('Failed to update memory palace:', error);
@@ -404,6 +542,9 @@ export default function MemoryPalacePage() {
                       onAddItem={handleAddItem}
                       onDeleteItem={handleDeleteItem}
                       onUpdateItem={handleUpdateItem}
+                      onAddRoom={handleAddRoom}
+                      onUpdateRoom={handleUpdateRoom}
+                      onDeleteRoom={handleDeleteRoom}
                     />
                   </CardContent>
                 </Card>

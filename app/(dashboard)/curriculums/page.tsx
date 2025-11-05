@@ -55,7 +55,12 @@ export default function CurriculumsPage() {
         });
       }
     } catch (error: any) {
-      alert(error.message || '커리큘럼 생성에 실패했습니다');
+      const errorMessage = error.message || '커리큘럼 생성에 실패했습니다';
+      if (errorMessage.includes('timeout') || errorMessage.includes('fetch')) {
+        alert('요청 시간이 초과되었습니다. AI 커리큘럼 생성에는 시간이 걸릴 수 있습니다 (최대 5분). 잠시 후 다시 시도해주세요.');
+      } else {
+        alert(errorMessage);
+      }
     } finally {
       setCreating(false);
     }
@@ -154,7 +159,7 @@ export default function CurriculumsPage() {
                 </div>
 
                 <Button type="submit" className="w-full" disabled={creating}>
-                  {creating ? 'AI가 커리큘럼을 생성 중입니다...' : '커리큘럼 생성하기'}
+                  {creating ? 'AI가 커리큘럼을 생성 중입니다... (최대 3분 소요)' : '커리큘럼 생성하기'}
                 </Button>
               </form>
             </CardContent>

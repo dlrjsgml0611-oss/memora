@@ -11,10 +11,13 @@ import {
   notFoundResponse,
 } from '@/lib/utils/response';
 
+// Increase timeout for AI generation (5 minutes)
+export const maxDuration = 300;
+
 // POST /api/concepts/:id/flashcards - Generate flashcards from concept
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     await connectDB();
@@ -24,7 +27,8 @@ export async function POST(
       return unauthorizedResponse();
     }
 
-    const concept = await Concept.findById(params.id);
+    const { id } = await params;
+    const concept = await Concept.findById(id);
     if (!concept) {
       return notFoundResponse('Concept');
     }

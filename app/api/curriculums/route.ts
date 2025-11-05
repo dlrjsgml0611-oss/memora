@@ -10,6 +10,9 @@ import {
   paginatedResponse,
 } from '@/lib/utils/response';
 
+// Increase timeout for AI generation (5 minutes)
+export const maxDuration = 300;
+
 // GET /api/curriculums - Get all curriculums for the user
 export async function GET(req: NextRequest) {
   try {

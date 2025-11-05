@@ -56,17 +56,18 @@ export class AIRouter {
   async generateConcept(
     topicTitle: string,
     curriculumContext: string,
-    model?: AIModel
+    model?: AIModel,
+    mode: 'encyclopedia' | 'conversational' = 'conversational'
   ): Promise<string> {
     const selectedModel = model || this.defaultModel;
 
     switch (selectedModel) {
       case 'openai':
-        return generateConceptWithOpenAI(topicTitle, curriculumContext);
+        return generateConceptWithOpenAI(topicTitle, curriculumContext, mode);
       case 'claude':
-        return generateConceptWithClaude(topicTitle, curriculumContext);
+        return generateConceptWithClaude(topicTitle, curriculumContext, mode);
       case 'gemini':
-        return generateConceptWithGemini(topicTitle, curriculumContext);
+        return generateConceptWithGemini(topicTitle, curriculumContext, mode);
       default:
         throw new Error(`Unknown AI model: ${selectedModel}`);
     }

@@ -137,9 +137,59 @@ export default function FlashcardsPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* Display based on card type */}
+                    {card.type === 'image' && card.front.includes('[IMG]') && (
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">이미지</div>
+                        <img
+                          src={card.front.match(/\[IMG\](.*?)\[\/IMG\]/)?.[1] || ''}
+                          alt="Flashcard"
+                          className="max-w-full h-48 object-contain rounded border border-gray-200"
+                          onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                        />
+                        <p className="mt-2 text-gray-800">{card.front.replace(/\[IMG\].*?\[\/IMG\]\n?/, '')}</p>
+                      </div>
+                    )}
+
+                    {card.type === 'cloze' && (
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">빈칸 문제</div>
+                        <p className="text-gray-800 whitespace-pre-wrap">
+                          {card.front.replace(/\{\{(.*?)\}\}/g, '___________')}
+                        </p>
+                      </div>
+                    )}
+
+                    {card.type === 'code' && (
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">질문</div>
+                        <p className="text-gray-800">{card.front}</p>
+                      </div>
+                    )}
+
+                    {card.type === 'basic' && (
+                      <div>
+                        <div className="text-sm text-gray-600 mb-1">질문</div>
+                        <p className="text-gray-800 whitespace-pre-wrap">{card.front}</p>
+                      </div>
+                    )}
+
                     <div>
                       <div className="text-sm text-gray-600 mb-1">답변</div>
-                      <p className="text-gray-800 whitespace-pre-wrap">{card.back}</p>
+                      {card.type === 'code' ? (
+                        <pre className="bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto text-sm font-mono">
+                          <code>{card.back}</code>
+                        </pre>
+                      ) : card.type === 'cloze' ? (
+                        <p className="text-gray-800 whitespace-pre-wrap">
+                          {card.back}
+                          <span className="ml-2 text-sm text-green-600 font-semibold">
+                            (정답: {card.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ')})
+                          </span>
+                        </p>
+                      ) : (
+                        <p className="text-gray-800 whitespace-pre-wrap">{card.back}</p>
+                      )}
                     </div>
 
                     {card.hint && (
