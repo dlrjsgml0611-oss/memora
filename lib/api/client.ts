@@ -1,6 +1,11 @@
 import { useAuthStore } from '@/store/authStore';
 import type { ApiResponse } from '@/types';
 
+// Warn if API URL is not set in production
+if (typeof window !== 'undefined' && !process.env.NEXT_PUBLIC_APP_URL && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️  NEXT_PUBLIC_APP_URL not set in production. API calls may fail.');
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 interface RequestOptions extends RequestInit {

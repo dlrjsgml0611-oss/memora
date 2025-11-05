@@ -184,7 +184,7 @@ export default function FlashcardsPage() {
                         <p className="text-gray-800 whitespace-pre-wrap">
                           {card.back}
                           <span className="ml-2 text-sm text-green-600 font-semibold">
-                            (정답: {card.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ')})
+                            (정답: {card.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ') || 'N/A'})
                           </span>
                         </p>
                       ) : (

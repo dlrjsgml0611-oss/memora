@@ -21,7 +21,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const includeNew = searchParams.get('includeNew') === 'true';
-    const newLimit = parseInt(searchParams.get('newLimit') || '10');
+    const newLimit = parseInt(searchParams.get('newLimit') || '10', 10);
+
+    if (isNaN(newLimit) || newLimit < 1) {
+      return errorResponse('Invalid newLimit parameter', 400);
+    }
 
     // Get all user's flashcards
     const allCards = await Flashcard.find({ userId: authUser.userId })

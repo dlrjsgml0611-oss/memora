@@ -1,6 +1,11 @@
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 import { JWTPayload } from '@/types';
 
+// In production, JWT_SECRET must be set in environment variables
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET environment variable must be set in production');
+}
+
 const JWT_SECRET: Secret =
   process.env.JWT_SECRET || 'your-fallback-secret-key-change-in-production';
 
@@ -19,8 +24,8 @@ function resolveExpiresIn(value?: string): SignOptions['expiresIn'] {
 
 const JWT_EXPIRES_IN = resolveExpiresIn(process.env.JWT_EXPIRES_IN);
 
-if (!process.env.JWT_SECRET) {
-  console.warn('⚠️  JWT_SECRET not set in environment variables. Using fallback (insecure).');
+if (!process.env.JWT_SECRET && process.env.NODE_ENV !== 'production') {
+  console.warn('⚠️  JWT_SECRET not set in environment variables. Using fallback (insecure for development only).');
 }
 
 export function signToken(payload: JWTPayload): string {
