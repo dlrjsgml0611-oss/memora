@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     const includeNew = searchParams.get('includeNew') === 'true';
     const newLimit = parseInt(searchParams.get('newLimit') || '10', 10);
 
-    if (isNaN(newLimit) || newLimit < 1) {
+    if (isNaN(newLimit) || newLimit < 0) {
       return errorResponse('Invalid newLimit parameter', 400);
     }
 

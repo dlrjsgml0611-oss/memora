@@ -65,6 +65,31 @@ export default function MemoryPalaceVisualization({
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [newRoomColor, setNewRoomColor] = useState('#3b82f6');
 
+  // Define callbacks BEFORE any early returns (Hook rules)
+  const goToPreviousRoom = useCallback(() => {
+    if (!rooms || rooms.length === 0) return;
+    setCurrentRoomIndex((prev) => (prev - 1 + rooms.length) % rooms.length);
+    setSelectedItem(null);
+  }, [rooms]);
+
+  const goToNextRoom = useCallback(() => {
+    if (!rooms || rooms.length === 0) return;
+    setCurrentRoomIndex((prev) => (prev + 1) % rooms.length);
+    setSelectedItem(null);
+  }, [rooms]);
+
+  const handleDeleteItem = useCallback((itemId: string) => {
+    if (!rooms || rooms.length === 0) return;
+    const validRoomIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
+    const currentRoom = rooms[validRoomIndex];
+    if (!currentRoom) return;
+
+    if (confirm('이 기억 항목을 삭제하시겠습니까?')) {
+      onDeleteItem?.(currentRoom.id, itemId);
+      setSelectedItem(null);
+    }
+  }, [rooms, currentRoomIndex, onDeleteItem]);
+
   // Ensure currentRoomIndex stays within valid bounds when rooms change
   useEffect(() => {
     if (rooms && rooms.length > 0 && currentRoomIndex >= rooms.length) {
@@ -72,6 +97,53 @@ export default function MemoryPalaceVisualization({
     }
   }, [rooms, currentRoomIndex]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Ignore if modal is open
+      if (editingItem || showAddForm || showAddRoomForm || showEditRoomForm) return;
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          if (rooms && rooms.length > 1) {
+            e.preventDefault();
+            goToPreviousRoom();
+          }
+          break;
+        case 'ArrowRight':
+          if (rooms && rooms.length > 1) {
+            e.preventDefault();
+            goToNextRoom();
+          }
+          break;
+        case 'n':
+        case 'N':
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            setShowAddForm(true);
+          }
+          break;
+        case 'Delete':
+        case 'Backspace':
+          if (selectedItem) {
+            e.preventDefault();
+            handleDeleteItem(selectedItem);
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setSelectedItem(null);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [rooms, selectedItem, editingItem, showAddForm, showAddRoomForm, showEditRoomForm, goToPreviousRoom, goToNextRoom, handleDeleteItem]);
+
+  // Early returns AFTER all Hooks
   if (!rooms || rooms.length === 0) {
     return (
       <div className="flex items-center justify-center h-96 bg-gray-100 rounded-lg">
@@ -93,16 +165,6 @@ export default function MemoryPalaceVisualization({
     );
   }
 
-  const goToPreviousRoom = useCallback(() => {
-    setCurrentRoomIndex((prev) => (prev - 1 + rooms.length) % rooms.length);
-    setSelectedItem(null);
-  }, [rooms.length]);
-
-  const goToNextRoom = useCallback(() => {
-    setCurrentRoomIndex((prev) => (prev + 1) % rooms.length);
-    setSelectedItem(null);
-  }, [rooms.length]);
-
   const handleAddItem = () => {
     if (!newItemContent.trim()) return;
 
@@ -121,13 +183,6 @@ export default function MemoryPalaceVisualization({
     setNewItemContent('');
     setShowAddForm(false);
   };
-
-  const handleDeleteItem = useCallback((itemId: string) => {
-    if (confirm('이 기억 항목을 삭제하시겠습니까?')) {
-      onDeleteItem?.(currentRoom.id, itemId);
-      setSelectedItem(null);
-    }
-  }, [currentRoom.id, onDeleteItem]);
 
   const handleEditItem = (item: MemoryItem) => {
     setEditingItem(item);
@@ -244,52 +299,6 @@ export default function MemoryPalaceVisualization({
     setNewRoomColor(currentRoom.color);
     setShowEditRoomForm(true);
   };
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      // Ignore if modal is open
-      if (editingItem || showAddForm || showAddRoomForm || showEditRoomForm) return;
-
-      switch (e.key) {
-        case 'ArrowLeft':
-          if (rooms.length > 1) {
-            e.preventDefault();
-            goToPreviousRoom();
-          }
-          break;
-        case 'ArrowRight':
-          if (rooms.length > 1) {
-            e.preventDefault();
-            goToNextRoom();
-          }
-          break;
-        case 'n':
-        case 'N':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            setShowAddForm(true);
-          }
-          break;
-        case 'Delete':
-        case 'Backspace':
-          if (selectedItem) {
-            e.preventDefault();
-            handleDeleteItem(selectedItem);
-          }
-          break;
-        case 'Escape':
-          e.preventDefault();
-          setSelectedItem(null);
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [rooms.length, selectedItem, editingItem, showAddForm, showAddRoomForm, showEditRoomForm, goToPreviousRoom, goToNextRoom, handleDeleteItem]);
 
   const get3DShape = (item: MemoryItem) => {
     const shape = item.shape || 'card';
