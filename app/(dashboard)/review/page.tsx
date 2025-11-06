@@ -15,6 +15,9 @@ export default function ReviewPage() {
   const [reviewing, setReviewing] = useState(false);
   const [sessionStats, setSessionStats] = useState({ correct: 0, total: 0 });
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [aiEvaluation, setAiEvaluation] = useState<any>(null);
+  const [evaluating, setEvaluating] = useState(false);
 
   useEffect(() => {
     loadDueCards();
@@ -44,6 +47,42 @@ export default function ReviewPage() {
     setShowAnswer(true);
   };
 
+  const handleSubmitAnswer = async () => {
+    if (!userAnswer.trim() || !currentCard) return;
+
+    setEvaluating(true);
+    setAiEvaluation(null);
+
+    try {
+      const response = await fetch('/api/flashcards/evaluate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
+        },
+        body: JSON.stringify({
+          question: currentCard.front,
+          correctAnswer: currentCard.back,
+          userAnswer: userAnswer.trim()
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setAiEvaluation(result.data.evaluation);
+        setShowAnswer(true);
+      } else {
+        alert('평가 중 오류가 발생했습니다: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Failed to evaluate answer:', error);
+      alert('평가 중 오류가 발생했습니다.');
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
   const handleRating = async (rating: 1 | 2 | 3 | 4) => {
     if (!cards[currentIndex] || reviewing) return;
 
@@ -64,6 +103,8 @@ export default function ReviewPage() {
         setCurrentIndex(currentIndex + 1);
         setShowAnswer(false);
         setShowHint(false);
+        setUserAnswer('');
+        setAiEvaluation(null);
       } else {
         // Session complete
         setCards([]);
@@ -160,89 +201,271 @@ export default function ReviewPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Question */}
-              <div className="bg-gray-50 p-8 rounded-lg border border-gray-200">
-                <div className="text-sm text-gray-600 mb-2">
-                  {currentCard.type === 'cloze' ? '빈칸 채우기' : '질문'}
-                </div>
-
-                {/* Image card with image */}
-                {currentCard.type === 'image' && currentCard.front.includes('[IMG]') && (
-                  <div className="mb-4">
-                    <img
-                      src={currentCard.front.match(/\[IMG\](.*?)\[\/IMG\]/)?.[1] || ''}
-                      alt="Question"
-                      className="max-w-full h-64 object-contain rounded border border-gray-300 mx-auto"
-                      onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
-                    />
+              <div className="rounded-xl border-2 border-purple-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">❓</span>
+                    <h3 className="text-lg font-bold text-white">
+                      {currentCard.type === 'cloze' ? '빈칸 채우기' : '질문'}
+                    </h3>
                   </div>
-                )}
+                </div>
+                <div className="bg-white p-8">
+                  {/* Image card with image */}
+                  {currentCard.type === 'image' && currentCard.front.includes('[IMG]') && (
+                    <div className="mb-6">
+                      <img
+                        src={currentCard.front.match(/\[IMG\](.*?)\[\/IMG\]/)?.[1] || ''}
+                        alt="Question"
+                        className="max-w-full h-64 object-contain rounded-lg border-2 border-gray-200 mx-auto shadow-sm"
+                        onError={(e) => (e.target as HTMLImageElement).style.display = 'none'}
+                      />
+                    </div>
+                  )}
 
-                <div className={`text-xl font-medium text-gray-900 whitespace-pre-wrap ${
-                  currentCard.type === 'code' ? 'font-mono' : ''
-                }`}>
-                  {currentCard.type === 'cloze'
-                    ? currentCard.front.replace(/\{\{(.*?)\}\}/g, '___________')
-                    : currentCard.type === 'image'
-                    ? currentCard.front.replace(/\[IMG\].*?\[\/IMG\]\n?/, '')
-                    : currentCard.front
-                  }
+                  <div className={`text-xl font-medium text-gray-900 whitespace-pre-wrap leading-relaxed ${
+                    currentCard.type === 'code' ? 'font-mono bg-gray-50 p-5 rounded-lg' : ''
+                  }`}>
+                    {currentCard.type === 'cloze'
+                      ? currentCard.front.replace(/\{\{(.*?)\}\}/g, '___________')
+                      : currentCard.type === 'image'
+                      ? currentCard.front.replace(/\[IMG\].*?\[\/IMG\]\n?/, '')
+                      : currentCard.front
+                    }
+                  </div>
                 </div>
               </div>
 
               {/* Hint Section */}
               {!showAnswer && showHint && currentCard.hint && (
-                <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-                  <div className="text-sm text-yellow-600 mb-2 font-semibold">💡 힌트</div>
-                  <div className="text-gray-700">{currentCard.hint}</div>
+                <div className="rounded-xl border-2 border-yellow-300 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="bg-gradient-to-r from-yellow-400 to-amber-400 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💡</span>
+                      <h3 className="text-lg font-bold text-gray-900">힌트</h3>
+                    </div>
+                  </div>
+                  <div className="bg-yellow-50 p-6">
+                    <div className="text-gray-800 leading-relaxed text-base">{currentCard.hint}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Answer Input Section */}
+              {!showAnswer && (
+                <div className="rounded-xl border-2 border-indigo-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">✍️</span>
+                      <h3 className="text-lg font-bold text-white">답변 작성</h3>
+                    </div>
+                  </div>
+                  <div className="bg-white p-6 space-y-4">
+                    <div className="space-y-3">
+                      <label htmlFor="userAnswer" className="block text-base font-semibold text-gray-800">
+                        💭 생각나는 대로 답변을 작성해보세요
+                      </label>
+                      <textarea
+                        id="userAnswer"
+                        value={userAnswer}
+                        onChange={(e) => setUserAnswer(e.target.value)}
+                        placeholder="여기에 답변을 입력하세요...&#10;&#10;💡 팁: 자세할수록 더 정확한 피드백을 받을 수 있습니다!"
+                        className="w-full px-5 py-4 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 min-h-[140px] leading-relaxed text-base transition-all"
+                        disabled={evaluating}
+                      />
+                      <div className="text-sm text-gray-500 flex items-center gap-2">
+                        <span>📝</span>
+                        <span>입력한 글자 수: {userAnswer.length}자</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {currentCard.hint && !showHint && (
+                        <Button
+                          onClick={() => setShowHint(true)}
+                          variant="outline"
+                          size="lg"
+                          className="border-2 border-yellow-400 text-yellow-700 hover:bg-yellow-50 font-semibold"
+                        >
+                          💡 힌트 보기
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleSubmitAnswer}
+                        size="lg"
+                        disabled={!userAnswer.trim() || evaluating}
+                        className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {evaluating ? (
+                          <>
+                            <span className="animate-spin mr-2">⏳</span>
+                            AI가 평가 중...
+                          </>
+                        ) : (
+                          <>
+                            <span className="mr-2">🤖</span>
+                            AI 평가 받기
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={handleShowAnswer}
+                        size="lg"
+                        variant="outline"
+                        disabled={evaluating}
+                        className="border-2 border-gray-300 hover:bg-gray-50 font-semibold"
+                      >
+                        💡 답변만 보기
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* AI Evaluation */}
+              {showAnswer && aiEvaluation && (
+                <div className={`rounded-xl border-2 overflow-hidden ${
+                  aiEvaluation.isCorrect ? 'border-green-400' : 'border-orange-400'
+                }`}>
+                  {/* Header */}
+                  <div className={`p-5 ${
+                    aiEvaluation.isCorrect ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-orange-500 to-amber-500'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-3xl">
+                          {aiEvaluation.isCorrect ? '✅' : '📝'}
+                        </span>
+                        <div>
+                          <h3 className="text-xl font-bold text-white">
+                            AI 평가 결과
+                          </h3>
+                          <p className="text-sm text-white/90">
+                            {aiEvaluation.isCorrect ? '정답입니다!' : '아쉽지만 다시 한번 확인해보세요'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-white/20 backdrop-blur-sm px-5 py-3 rounded-full">
+                        <span className="text-2xl font-bold text-white">
+                          {aiEvaluation.score}점
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="bg-white p-6 space-y-5">
+                    {/* Your Answer */}
+                    <div className="bg-gray-50 rounded-lg p-5 border-l-4 border-blue-400">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xl">📝</span>
+                        <h4 className="font-bold text-gray-900 text-base">당신의 답변</h4>
+                      </div>
+                      <div className="text-gray-900 whitespace-pre-wrap leading-relaxed text-base pl-7">
+                        {userAnswer}
+                      </div>
+                    </div>
+
+                    {/* Feedback */}
+                    <div className="bg-blue-50 rounded-lg p-5 border-l-4 border-blue-500">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-xl">💬</span>
+                        <h4 className="font-bold text-gray-900 text-base">AI 피드백</h4>
+                      </div>
+                      <p className="text-gray-800 leading-relaxed text-base pl-7">
+                        {aiEvaluation.feedback}
+                      </p>
+                    </div>
+
+                    {/* Strengths and Improvements Grid */}
+                    <div className="grid md:grid-cols-2 gap-5">
+                      {/* Strengths */}
+                      {aiEvaluation.strengths && aiEvaluation.strengths.length > 0 && (
+                        <div className="bg-green-50 rounded-lg p-5 border-l-4 border-green-500">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">👍</span>
+                            <h4 className="font-bold text-green-900 text-base">잘한 점</h4>
+                          </div>
+                          <ul className="space-y-2 pl-7">
+                            {aiEvaluation.strengths.map((strength: string, idx: number) => (
+                              <li key={idx} className="text-gray-800 leading-relaxed flex items-start">
+                                <span className="text-green-500 mr-2 mt-1">•</span>
+                                <span className="flex-1">{strength}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Improvements */}
+                      {aiEvaluation.improvements && aiEvaluation.improvements.length > 0 && (
+                        <div className="bg-orange-50 rounded-lg p-5 border-l-4 border-orange-500">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-xl">📈</span>
+                            <h4 className="font-bold text-orange-900 text-base">개선할 점</h4>
+                          </div>
+                          <ul className="space-y-2 pl-7">
+                            {aiEvaluation.improvements.map((improvement: string, idx: number) => (
+                              <li key={idx} className="text-gray-800 leading-relaxed flex items-start">
+                                <span className="text-orange-500 mr-2 mt-1">•</span>
+                                <span className="flex-1">{improvement}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Answer */}
               {showAnswer ? (
-                <div className="bg-blue-50 p-8 rounded-lg border border-blue-200">
-                  <div className="text-sm text-blue-600 mb-2">답변</div>
-                  {currentCard.type === 'code' ? (
-                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-                      <code>{currentCard.back}</code>
-                    </pre>
-                  ) : currentCard.type === 'cloze' ? (
-                    <div className="text-xl text-gray-900 whitespace-pre-wrap">
-                      {currentCard.back}
-                      <div className="mt-3 text-base text-green-600 font-semibold">
-                        ✓ 정답: {currentCard.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ') || 'N/A'}
+                <div className="rounded-xl border-2 border-blue-300 overflow-hidden">
+                  <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">💡</span>
+                      <h3 className="text-lg font-bold text-white">정답</h3>
+                    </div>
+                  </div>
+                  <div className="bg-white p-6">
+                    {currentCard.type === 'code' ? (
+                      <pre className="bg-gray-900 text-gray-100 p-5 rounded-lg overflow-x-auto text-sm font-mono leading-relaxed">
+                        <code>{currentCard.back}</code>
+                      </pre>
+                    ) : currentCard.type === 'cloze' ? (
+                      <div>
+                        <div className="text-lg text-gray-900 whitespace-pre-wrap leading-relaxed mb-4">
+                          {currentCard.back}
+                        </div>
+                        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">✓</span>
+                            <span className="font-bold text-green-900">정답:</span>
+                            <span className="text-green-700 font-semibold">
+                              {currentCard.front.match(/\{\{(.*?)\}\}/g)?.map((m: string) => m.replace(/[{}]/g, '')).join(', ') || 'N/A'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-xl text-gray-900 whitespace-pre-wrap">
-                      {currentCard.back}
-                    </div>
-                  )}
-                  {currentCard.hint && (
-                    <div className="mt-4 pt-4 border-t border-blue-200">
-                      <div className="text-sm text-blue-600">힌트</div>
-                      <div className="text-gray-700">{currentCard.hint}</div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center space-y-3">
-                  {currentCard.hint && !showHint && (
-                    <Button
-                      onClick={() => setShowHint(true)}
-                      variant="outline"
-                      size="lg"
-                      className="border-yellow-300 text-yellow-600 hover:bg-yellow-50"
-                    >
-                      💡 힌트 보기
-                    </Button>
-                  )}
-                  <div>
-                    <Button onClick={handleShowAnswer} size="lg">
-                      답변 확인하기
-                    </Button>
+                    ) : (
+                      <div className="text-lg text-gray-900 whitespace-pre-wrap leading-relaxed">
+                        {currentCard.back}
+                      </div>
+                    )}
+                    {currentCard.hint && (
+                      <div className="mt-5 pt-5 border-t border-gray-200">
+                        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-xl">💡</span>
+                            <h4 className="font-bold text-yellow-900">힌트</h4>
+                          </div>
+                          <div className="text-gray-800 leading-relaxed pl-7">{currentCard.hint}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Rating Buttons */}
               {showAnswer && (
