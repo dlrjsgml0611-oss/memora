@@ -11,8 +11,8 @@ export async function generateWithClaude(prompt: string, options?: {
 }): Promise<string> {
   try {
     const message = await claude.messages.create({
-      model: options?.model || 'claude-sonnet-4-5-20250929',
-      max_tokens: options?.maxTokens || 2000,
+      model: options?.model || 'claude-opus-4-5',
+      max_tokens: options?.maxTokens || 20000,
       temperature: options?.temperature || 0.7,
       messages: [{ role: 'user', content: prompt }],
     });

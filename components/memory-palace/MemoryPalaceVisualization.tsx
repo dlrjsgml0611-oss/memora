@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Trash2, Edit } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2, Edit, Play, Pause, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditItemModal from './EditItemModal';
 
@@ -40,6 +40,8 @@ interface MemoryPalaceVisualizationProps {
   onDeleteRoom?: (roomId: string) => void;
 }
 
+type ViewPreset = 'front' | 'top' | 'side' | 'isometric';
+
 export default function MemoryPalaceVisualization({
   rooms,
   onAddItem,
@@ -64,6 +66,85 @@ export default function MemoryPalaceVisualization({
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [newRoomColor, setNewRoomColor] = useState('#3b82f6');
+
+  // Tour mode state
+  const [isTourMode, setIsTourMode] = useState(false);
+  const [tourItemIndex, setTourItemIndex] = useState(0);
+  const [tourAutoPlay, setTourAutoPlay] = useState(false);
+  const tourIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // View presets
+  const viewPresets: Record<ViewPreset, { x: number; y: number; label: string }> = {
+    front: { x: 0, y: 0, label: '정면' },
+    top: { x: 45, y: 0, label: '위' },
+    side: { x: 0, y: 30, label: '측면' },
+    isometric: { x: 20, y: 20, label: '등각' },
+  };
+
+  const applyViewPreset = (preset: ViewPreset) => {
+    setRotation(viewPresets[preset]);
+  };
+
+  // Tour mode functions
+  const startTour = useCallback(() => {
+    if (!rooms || rooms.length === 0) return;
+    const validRoomIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
+    const currentRoom = rooms[validRoomIndex];
+    if (!currentRoom || currentRoom.items.length === 0) {
+      alert('이 방에 기억 항목이 없습니다.');
+      return;
+    }
+    setIsTourMode(true);
+    setTourItemIndex(0);
+    setSelectedItem(currentRoom.items[0].id);
+  }, [rooms, currentRoomIndex]);
+
+  const stopTour = useCallback(() => {
+    setIsTourMode(false);
+    setTourAutoPlay(false);
+    if (tourIntervalRef.current) {
+      clearInterval(tourIntervalRef.current);
+      tourIntervalRef.current = null;
+    }
+  }, []);
+
+  const nextTourItem = useCallback(() => {
+    if (!rooms || rooms.length === 0) return;
+    const validRoomIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
+    const currentRoom = rooms[validRoomIndex];
+    if (!currentRoom) return;
+
+    const nextIndex = tourItemIndex + 1;
+    if (nextIndex >= currentRoom.items.length) {
+      // Move to next room or end tour
+      if (currentRoomIndex < rooms.length - 1) {
+        setCurrentRoomIndex(currentRoomIndex + 1);
+        setTourItemIndex(0);
+        const nextRoom = rooms[currentRoomIndex + 1];
+        if (nextRoom.items.length > 0) {
+          setSelectedItem(nextRoom.items[0].id);
+        }
+      } else {
+        stopTour();
+      }
+    } else {
+      setTourItemIndex(nextIndex);
+      setSelectedItem(currentRoom.items[nextIndex].id);
+    }
+  }, [rooms, currentRoomIndex, tourItemIndex, stopTour]);
+
+  // Auto-play tour
+  useEffect(() => {
+    if (tourAutoPlay && isTourMode) {
+      tourIntervalRef.current = setInterval(nextTourItem, 3000);
+    } else if (tourIntervalRef.current) {
+      clearInterval(tourIntervalRef.current);
+      tourIntervalRef.current = null;
+    }
+    return () => {
+      if (tourIntervalRef.current) clearInterval(tourIntervalRef.current);
+    };
+  }, [tourAutoPlay, isTourMode, nextTourItem]);
 
   // Define callbacks BEFORE any early returns (Hook rules)
   const goToPreviousRoom = useCallback(() => {
@@ -632,49 +713,57 @@ export default function MemoryPalaceVisualization({
             <div>• ESC : 선택 취소</div>
             <div>• 드래그 : 항목 이동</div>
           </div>
+
+          <div className="font-semibold mb-2 text-gray-900">🎬 시점 프리셋</div>
+          <div className="flex gap-1 flex-wrap mb-3">
+            {(Object.keys(viewPresets) as ViewPreset[]).map((preset) => (
+              <Button
+                key={preset}
+                size="sm"
+                variant="outline"
+                onClick={() => applyViewPreset(preset)}
+                className="text-xs px-2 py-1"
+              >
+                {viewPresets[preset].label}
+              </Button>
+            ))}
+          </div>
+
           <div className="font-semibold mb-2 text-gray-900">시점 조정</div>
           <div className="flex gap-2 flex-wrap">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRotation({ x: rotation.x - 10, y: rotation.y })}
-              title="위로 회전"
-            >
-              ↑
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRotation({ x: rotation.x + 10, y: rotation.y })}
-              title="아래로 회전"
-            >
-              ↓
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRotation({ x: rotation.x, y: rotation.y - 10 })}
-              title="왼쪽으로 회전"
-            >
-              ←
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRotation({ x: rotation.x, y: rotation.y + 10 })}
-              title="오른쪽으로 회전"
-            >
-              →
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRotation({ x: 0, y: 0 })}
-              title="시점 초기화"
-            >
-              초기화
-            </Button>
+            <Button size="sm" variant="outline" onClick={() => setRotation({ x: rotation.x - 10, y: rotation.y })} title="위로 회전">↑</Button>
+            <Button size="sm" variant="outline" onClick={() => setRotation({ x: rotation.x + 10, y: rotation.y })} title="아래로 회전">↓</Button>
+            <Button size="sm" variant="outline" onClick={() => setRotation({ x: rotation.x, y: rotation.y - 10 })} title="왼쪽으로 회전">←</Button>
+            <Button size="sm" variant="outline" onClick={() => setRotation({ x: rotation.x, y: rotation.y + 10 })} title="오른쪽으로 회전">→</Button>
+            <Button size="sm" variant="outline" onClick={() => setRotation({ x: 0, y: 0 })} title="시점 초기화">⟲</Button>
           </div>
+        </div>
+
+        {/* Tour Mode Controls */}
+        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg shadow-md">
+          <div className="font-semibold mb-2 text-gray-900 text-sm">🚶 투어 모드</div>
+          {!isTourMode ? (
+            <Button size="sm" onClick={startTour} className="w-full">
+              <Play className="h-3 w-3 mr-1" /> 투어 시작
+            </Button>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs text-gray-600 text-center">
+                {tourItemIndex + 1} / {rooms[Math.max(0, Math.min(currentRoomIndex, rooms.length - 1))]?.items.length || 0}
+              </div>
+              <div className="flex gap-1">
+                <Button size="sm" variant="outline" onClick={() => setTourAutoPlay(!tourAutoPlay)}>
+                  {tourAutoPlay ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                </Button>
+                <Button size="sm" variant="outline" onClick={nextTourItem}>
+                  <SkipForward className="h-3 w-3" />
+                </Button>
+                <Button size="sm" variant="outline" onClick={stopTour} className="text-red-500">
+                  ✕
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Add Item Button */}

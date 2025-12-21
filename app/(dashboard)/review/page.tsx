@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api/client';
+import { BookOpen, Target, Loader2, PartyPopper, Home, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function ReviewPage() {
   const [cards, setCards] = useState<any[]>([]);
@@ -126,20 +127,20 @@ export default function ReviewPage() {
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">플래시카드 복습</h1>
-          <p className="text-gray-600 mt-2">오늘의 복습 카드를 학습하세요</p>
+          <h1 className="text-3xl font-bold text-slate-800">플래시카드 복습</h1>
+          <p className="text-slate-500 mt-1">오늘의 복습 카드를 학습하세요</p>
         </div>
 
         {/* Progress Bar */}
         {cards.length > 0 && (
           <div className="space-y-2">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>진행률</span>
-              <span>{currentIndex + 1} / {cards.length}</span>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-500">진행률</span>
+              <span className="font-medium text-slate-700">{currentIndex + 1} / {cards.length}</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
+            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
               <div
-                className="bg-blue-600 h-2 rounded-full transition-all"
+                className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2.5 rounded-full transition-all duration-500"
                 style={{ width: `${((currentIndex + 1) / cards.length) * 100}%` }}
               />
             </div>
@@ -148,45 +149,61 @@ export default function ReviewPage() {
 
         {/* Session Stats */}
         {sessionStats.total > 0 && (
-          <div className="flex gap-4">
-            <div className="bg-green-50 border border-green-200 px-4 py-2 rounded-lg">
-              <span className="text-green-700 font-semibold">
-                정확도: {accuracy}%
-              </span>
+          <div className="flex gap-3">
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl">
+              <Target className="w-4 h-4 text-emerald-600" />
+              <span className="text-emerald-700 font-medium">정확도: {accuracy}%</span>
             </div>
-            <div className="bg-blue-50 border border-blue-200 px-4 py-2 rounded-lg">
-              <span className="text-blue-700 font-semibold">
-                복습한 카드: {sessionStats.total}개
-              </span>
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-4 py-2 rounded-xl">
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              <span className="text-blue-700 font-medium">복습: {sessionStats.total}개</span>
             </div>
           </div>
         )}
 
         {loading ? (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <div className="text-gray-500">카드를 불러오는 중...</div>
+          <Card className="border-0 shadow-lg">
+            <CardContent className="p-12 flex flex-col items-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500 mb-3" />
+              <p className="text-slate-500">카드를 불러오는 중...</p>
             </CardContent>
           </Card>
         ) : isComplete ? (
-          <Card className="bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
-            <CardContent className="p-12 text-center space-y-4">
-              <div className="text-6xl mb-4">🎉</div>
-              <h2 className="text-3xl font-bold text-gray-900">복습 완료!</h2>
-              <p className="text-gray-600">
+          <Card className="border-0 shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 p-10 text-white text-center">
+              <div className="w-20 h-20 mx-auto rounded-full bg-white/20 backdrop-blur flex items-center justify-center mb-4">
+                <PartyPopper className="w-10 h-10" />
+              </div>
+              <h2 className="text-3xl font-bold mb-2">복습 완료!</h2>
+              <p className="text-emerald-100">
                 {sessionStats.total > 0
-                  ? `오늘 ${sessionStats.total}개의 카드를 복습했습니다. 정확도: ${accuracy}%`
-                  : '복습할 카드가 없습니다.'}
+                  ? `오늘 ${sessionStats.total}개의 카드를 복습했습니다`
+                  : '복습할 카드가 없습니다'}
               </p>
-              <div className="pt-4">
-                <Button onClick={() => window.location.href = '/dashboard'}>
+            </div>
+            {sessionStats.total > 0 && (
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="text-center p-4 rounded-xl bg-emerald-50">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-slate-800">{sessionStats.correct}</div>
+                    <p className="text-sm text-slate-500">정답</p>
+                  </div>
+                  <div className="text-center p-4 rounded-xl bg-slate-50">
+                    <XCircle className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+                    <div className="text-2xl font-bold text-slate-800">{sessionStats.total - sessionStats.correct}</div>
+                    <p className="text-sm text-slate-500">오답</p>
+                  </div>
+                </div>
+                <Button onClick={() => window.location.href = '/dashboard'} className="w-full rounded-xl h-12">
+                  <Home className="w-4 h-4 mr-2" />
                   대시보드로 돌아가기
                 </Button>
-              </div>
-            </CardContent>
+              </CardContent>
+            )}
           </Card>
         ) : currentCard ? (
-          <Card className="min-h-[400px]">
+          <Card className="min-h-[400px] border-0 shadow-lg">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle>
@@ -469,47 +486,28 @@ export default function ReviewPage() {
 
               {/* Rating Buttons */}
               {showAnswer && (
-                <div className="pt-6 border-t border-gray-200">
-                  <div className="text-sm text-gray-600 mb-4 text-center">
+                <div className="pt-6 border-t border-slate-100">
+                  <div className="text-sm text-slate-500 mb-4 text-center font-medium">
                     얼마나 잘 기억했나요?
                   </div>
                   <div className="grid grid-cols-4 gap-3">
-                    <Button
-                      variant="outline"
-                      className="h-20 flex flex-col border-red-200 hover:bg-red-50"
-                      onClick={() => handleRating(1)}
-                      disabled={reviewing}
-                    >
-                      <span className="text-2xl mb-1">😢</span>
-                      <span className="text-sm">전혀</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-20 flex flex-col border-orange-200 hover:bg-orange-50"
-                      onClick={() => handleRating(2)}
-                      disabled={reviewing}
-                    >
-                      <span className="text-2xl mb-1">😕</span>
-                      <span className="text-sm">어려움</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-20 flex flex-col border-green-200 hover:bg-green-50"
-                      onClick={() => handleRating(3)}
-                      disabled={reviewing}
-                    >
-                      <span className="text-2xl mb-1">😊</span>
-                      <span className="text-sm">좋음</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-20 flex flex-col border-blue-200 hover:bg-blue-50"
-                      onClick={() => handleRating(4)}
-                      disabled={reviewing}
-                    >
-                      <span className="text-2xl mb-1">😄</span>
-                      <span className="text-sm">쉬움</span>
-                    </Button>
+                    {[
+                      { rating: 1, emoji: '😢', label: '전혀', color: 'red' },
+                      { rating: 2, emoji: '😕', label: '어려움', color: 'orange' },
+                      { rating: 3, emoji: '😊', label: '좋음', color: 'emerald' },
+                      { rating: 4, emoji: '😄', label: '쉬움', color: 'blue' },
+                    ].map(({ rating, emoji, label, color }) => (
+                      <Button
+                        key={rating}
+                        variant="outline"
+                        className={`h-20 flex flex-col rounded-xl border-2 border-${color}-200 hover:bg-${color}-50 hover:border-${color}-300 transition-all`}
+                        onClick={() => handleRating(rating as 1 | 2 | 3 | 4)}
+                        disabled={reviewing}
+                      >
+                        <span className="text-2xl mb-1">{emoji}</span>
+                        <span className="text-sm font-medium">{label}</span>
+                      </Button>
+                    ))}
                   </div>
                 </div>
               )}

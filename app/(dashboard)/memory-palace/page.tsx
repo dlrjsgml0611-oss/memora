@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import MemoryPalaceVisualization from '@/components/memory-palace/MemoryPalaceVisualization';
+import EditItemModal from '@/components/memory-palace/EditItemModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api/client';
+
+// Lazy load 3D component
+const MemoryPalace3D = lazy(() => import('@/components/memory-palace/MemoryPalace3D'));
 
 interface MemoryItem {
   id: string;
@@ -17,6 +21,7 @@ interface MemoryItem {
   shape?: 'box' | 'sphere' | 'cylinder' | 'pyramid' | 'card';
   size?: 'small' | 'medium' | 'large';
   color?: string;
+  height?: number;
 }
 
 interface Room {
@@ -27,12 +32,18 @@ interface Room {
   color: string;
 }
 
+type ViewMode = '2d' | '3d';
+
 export default function MemoryPalacePage() {
   const [palaces, setPalaces] = useState<any[]>([]);
   const [selectedPalace, setSelectedPalace] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPalaceTitle, setNewPalaceTitle] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('3d');
+  const [currentRoomIndex, setCurrentRoomIndex] = useState(0);
+  const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<MemoryItem | null>(null);
 
   useEffect(() => {
     loadPalaces();
@@ -193,6 +204,7 @@ export default function MemoryPalacePage() {
     shape?: 'box' | 'sphere' | 'cylinder' | 'pyramid' | 'card';
     size?: 'small' | 'medium' | 'large';
     color?: string;
+    height?: number;
   }) => {
     if (!selectedPalace) return;
 
@@ -531,21 +543,91 @@ export default function MemoryPalacePage() {
                           방을 탐험하며 기억을 배치하세요
                         </CardDescription>
                       </div>
-                      <Button variant="outline" onClick={handleExport}>
-                        📄 출력
-                      </Button>
+                      <div className="flex gap-2">
+                        {/* View Mode Toggle */}
+                        <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                          <button
+                            onClick={() => setViewMode('3d')}
+                            className={`px-3 py-1.5 text-sm font-medium ${viewMode === '3d' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            🎮 3D
+                          </button>
+                          <button
+                            onClick={() => setViewMode('2d')}
+                            className={`px-3 py-1.5 text-sm font-medium ${viewMode === '2d' ? 'bg-blue-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                          >
+                            📋 2D
+                          </button>
+                        </div>
+                        <Button variant="outline" onClick={handleExport}>
+                          📄 출력
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <MemoryPalaceVisualization
-                      rooms={selectedPalace.rooms || []}
-                      onAddItem={handleAddItem}
-                      onDeleteItem={handleDeleteItem}
-                      onUpdateItem={handleUpdateItem}
-                      onAddRoom={handleAddRoom}
-                      onUpdateRoom={handleUpdateRoom}
-                      onDeleteRoom={handleDeleteRoom}
-                    />
+                    {viewMode === '3d' ? (
+                      <div className="space-y-4">
+                        {/* Room Navigation for 3D */}
+                        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentRoomIndex(Math.max(0, currentRoomIndex - 1))}
+                            disabled={currentRoomIndex === 0}
+                          >
+                            ← 이전 방
+                          </Button>
+                          <div className="text-center">
+                            <span className="font-semibold">{selectedPalace.rooms?.[currentRoomIndex]?.name}</span>
+                            <span className="text-gray-500 text-sm ml-2">
+                              ({currentRoomIndex + 1} / {selectedPalace.rooms?.length || 0})
+                            </span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentRoomIndex(Math.min((selectedPalace.rooms?.length || 1) - 1, currentRoomIndex + 1))}
+                            disabled={currentRoomIndex >= (selectedPalace.rooms?.length || 1) - 1}
+                          >
+                            다음 방 →
+                          </Button>
+                        </div>
+
+                        {/* 3D View */}
+                        <Suspense fallback={<div className="h-[600px] flex items-center justify-center bg-gray-100 rounded-lg">3D 뷰 로딩 중...</div>}>
+                          {selectedPalace.rooms?.[currentRoomIndex] && (
+                            <MemoryPalace3D
+                              room={selectedPalace.rooms[currentRoomIndex]}
+                              selectedItem={selectedItem}
+                              onSelectItem={setSelectedItem}
+                              onEditItem={(item) => setEditingItem(item)}
+                              onUpdateItem={(itemId, data) => {
+                                handleUpdateItem(selectedPalace.rooms[currentRoomIndex].id, itemId, data);
+                              }}
+                            />
+                          )}
+                        </Suspense>
+
+                        {/* 3D Controls Help */}
+                        <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                          <span className="font-semibold">🎮 3D 컨트롤:</span>
+                          <span className="ml-2 text-gray-600">
+                            마우스 드래그로 회전 • 스크롤로 확대/축소 • 우클릭 드래그로 이동 • 오브젝트 클릭으로 선택 • 더블클릭으로 편집
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <MemoryPalaceVisualization
+                        rooms={selectedPalace.rooms || []}
+                        onAddItem={handleAddItem}
+                        onDeleteItem={handleDeleteItem}
+                        onUpdateItem={handleUpdateItem}
+                        onAddRoom={handleAddRoom}
+                        onUpdateRoom={handleUpdateRoom}
+                        onDeleteRoom={handleDeleteRoom}
+                      />
+                    )}
                   </CardContent>
                 </Card>
               ) : (
@@ -559,6 +641,24 @@ export default function MemoryPalacePage() {
               )}
             </div>
           </div>
+        )}
+
+        {/* Edit Item Modal for 3D view */}
+        {editingItem && (
+          <EditItemModal
+            item={editingItem}
+            onClose={() => setEditingItem(null)}
+            onSave={(itemId, data) => {
+              if (selectedPalace?.rooms?.[currentRoomIndex]) {
+                handleUpdateItem(selectedPalace.rooms[currentRoomIndex].id, itemId, {
+                  ...data,
+                  shape: data.shape as 'box' | 'sphere' | 'cylinder' | 'pyramid' | 'card' | undefined,
+                  size: data.size as 'small' | 'medium' | 'large' | undefined,
+                });
+              }
+              setEditingItem(null);
+            }}
+          />
         )}
 
         {/* Info Section */}

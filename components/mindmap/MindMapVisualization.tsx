@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import EditNodeModal from './EditNodeModal';
 
@@ -13,8 +13,8 @@ interface MindMapNode {
   x?: number;
   y?: number;
   depth?: number;
-  fx?: number; // Fixed x position (custom position)
-  fy?: number; // Fixed y position (custom position)
+  fx?: number;
+  fy?: number;
 }
 
 interface MindMapVisualizationProps {
@@ -27,6 +27,8 @@ interface MindMapVisualizationProps {
   onPositionUpdate?: (updatedStructure: MindMapNode) => void;
 }
 
+type LayoutType = 'radial' | 'tree' | 'horizontal';
+
 export default function MindMapVisualization({
   data,
   width = 1200,
@@ -37,6 +39,8 @@ export default function MindMapVisualization({
   onPositionUpdate
 }: MindMapVisualizationProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
+  const gRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [editingNode, setEditingNode] = useState<MindMapNode | null>(null);
   const [mindmapData, setMindmapData] = useState<MindMapNode>(data);
@@ -44,9 +48,69 @@ export default function MindMapVisualization({
   const [newNodeName, setNewNodeName] = useState('');
   const [allNodes, setAllNodes] = useState<MindMapNode[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [layout, setLayout] = useState<LayoutType>('radial');
+  const [zoomLevel, setZoomLevel] = useState(1);
   const draggedNodeRef = useRef<{ id: string; startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
   const linksRef = useRef<any>(null);
   const nodesRef = useRef<any>(null);
+
+  const [showHelp, setShowHelp] = useState(false);
+
+  // 이미지로 저장
+  const handleSaveAsImage = useCallback(() => {
+    if (!svgRef.current) return;
+    const svg = svgRef.current;
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svg);
+    const canvas = document.createElement('canvas');
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const a = document.createElement('a');
+      a.download = 'mindmap.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+    };
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+  }, [width, height]);
+
+  // Zoom control functions
+  const handleZoomIn = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy as any, 1.3);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy as any, 0.7);
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current) return;
+    d3.select(svgRef.current).transition().duration(500).call(
+      zoomRef.current.transform as any,
+      d3.zoomIdentity.translate(width / 2, height / 2)
+    );
+    setZoomLevel(1);
+  }, [width, height]);
+
+  const handleFitToScreen = useCallback(() => {
+    if (!svgRef.current || !zoomRef.current || !gRef.current) return;
+    const bounds = (gRef.current.node() as SVGGElement)?.getBBox();
+    if (!bounds) return;
+    const scale = Math.min(width / (bounds.width + 100), height / (bounds.height + 100), 2) * 0.9;
+    d3.select(svgRef.current).transition().duration(500).call(
+      zoomRef.current.transform as any,
+      d3.zoomIdentity.translate(width / 2, height / 2).scale(scale)
+    );
+    setZoomLevel(scale);
+  }, [width, height]);
 
   useEffect(() => {
     setMindmapData(data);
@@ -218,33 +282,53 @@ export default function MindMapVisualization({
 
     const svg = d3.select(svgRef.current);
     const g = svg.append('g').attr('transform', `translate(${width / 2},${height / 2})`);
-
-    // Create tree layout
-    const tree = d3.tree<MindMapNode>()
-      .size([2 * Math.PI, Math.min(width, height) / 2 - 100])
-      .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth!);
+    gRef.current = g;
 
     // Create hierarchy
     const root = d3.hierarchy(mindmapData);
-    tree(root as any);
+
+    // Layout based on type
+    let getNodePosition: (d: any) => { x: number; y: number };
+
+    if (layout === 'radial') {
+      const tree = d3.tree<MindMapNode>()
+        .size([2 * Math.PI, Math.min(width, height) / 2 - 100])
+        .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth!);
+      tree(root as any);
+
+      getNodePosition = (d: any) => {
+        if (d.data.fx !== undefined && d.data.fy !== undefined) {
+          return { x: d.data.fx, y: d.data.fy };
+        }
+        const angle = d.x;
+        const radius = d.y;
+        return { x: radius * Math.cos(angle - Math.PI / 2), y: radius * Math.sin(angle - Math.PI / 2) };
+      };
+    } else if (layout === 'tree') {
+      const tree = d3.tree<MindMapNode>().size([width - 200, height - 200]);
+      tree(root as any);
+
+      getNodePosition = (d: any) => {
+        if (d.data.fx !== undefined && d.data.fy !== undefined) {
+          return { x: d.data.fx, y: d.data.fy };
+        }
+        return { x: d.x - width / 2 + 100, y: d.y - height / 2 + 100 };
+      };
+    } else {
+      const tree = d3.tree<MindMapNode>().size([height - 200, width - 200]);
+      tree(root as any);
+
+      getNodePosition = (d: any) => {
+        if (d.data.fx !== undefined && d.data.fy !== undefined) {
+          return { x: d.data.fx, y: d.data.fy };
+        }
+        return { x: d.y - width / 2 + 100, y: d.x - height / 2 + 100 };
+      };
+    }
 
     // 모든 노드를 배열로 저장
     const nodesList = (root as any).descendants().map((d: any) => d.data);
     setAllNodes(nodesList);
-
-    // Helper function to calculate node position (considering custom position)
-    const getNodePosition = (d: any) => {
-      // If node has custom position (fx, fy), use that
-      if (d.data.fx !== undefined && d.data.fy !== undefined) {
-        return { x: d.data.fx, y: d.data.fy };
-      }
-      // Otherwise use radial layout position
-      const angle = d.x;
-      const radius = d.y;
-      const x = radius * Math.cos(angle - Math.PI / 2);
-      const y = radius * Math.sin(angle - Math.PI / 2);
-      return { x, y };
-    };
 
     // Add links
     const links = g.selectAll('.link')
@@ -485,11 +569,13 @@ export default function MindMapVisualization({
 
     // Add zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.5, 3])
+      .scaleExtent([0.3, 4])
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
+        setZoomLevel(event.transform.k);
       });
 
+    zoomRef.current = zoom;
     svg.call(zoom as any);
 
     // Reset button behavior
@@ -498,9 +584,10 @@ export default function MindMapVisualization({
         zoom.transform as any,
         d3.zoomIdentity.translate(width / 2, height / 2)
       );
+      setZoomLevel(1);
     });
 
-  }, [mindmapData, width, height]);
+  }, [mindmapData, width, height, layout]);
 
   return (
     <div className="relative w-full">
@@ -510,25 +597,70 @@ export default function MindMapVisualization({
         height={height}
         className="border border-gray-200 rounded-lg bg-white shadow-sm"
       />
-      <div className="absolute top-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg shadow-md text-sm text-gray-600 max-w-xs">
-        <div className="font-semibold mb-2 text-gray-900">⌨️ 컨트롤</div>
-        <div className="space-y-1">
-          <div className="font-medium text-gray-700">마우스</div>
-          <div>• 배경 드래그: 화면 이동</div>
-          <div>• 노드 드래그: 노드 위치 조정</div>
-          <div>• 스크롤: 확대/축소</div>
-          <div>• 더블클릭(배경): 초기화</div>
-          <div>• 노드 클릭: 선택</div>
-          <div>• 노드 더블클릭: 편집</div>
-          <div>• 노드 우클릭: 하위 노드 추가</div>
-          <div className="font-medium text-gray-700 mt-2">키보드</div>
-          <div>• ↑↓: 이전/다음 노드</div>
-          <div>• ←→: 부모/자식 노드</div>
-          <div>• Enter: 노드 편집</div>
-          <div>• +/Insert: 하위 노드 추가</div>
-          <div>• Delete/Backspace: 노드 삭제</div>
+
+      {/* Zoom Controls */}
+      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur p-2 rounded-lg shadow-md flex flex-col gap-1">
+        <button onClick={handleZoomIn} className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-lg font-bold" title="확대">+</button>
+        <div className="text-xs text-center text-gray-600 py-1">{Math.round(zoomLevel * 100)}%</div>
+        <button onClick={handleZoomOut} className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-lg font-bold" title="축소">−</button>
+        <div className="border-t border-gray-200 my-1" />
+        <button onClick={handleZoomReset} className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-xs" title="초기화">⟲</button>
+        <button onClick={handleFitToScreen} className="w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded text-xs" title="화면 맞춤">⛶</button>
+        <div className="border-t border-gray-200 my-1" />
+        <button onClick={handleSaveAsImage} className="w-8 h-8 flex items-center justify-center bg-blue-100 hover:bg-blue-200 rounded text-xs" title="이미지 저장">📷</button>
+      </div>
+
+      {/* Layout Toggle */}
+      <div className="absolute top-4 left-16 bg-white/90 backdrop-blur p-2 rounded-lg shadow-md">
+        <div className="text-xs font-semibold text-gray-700 mb-2">레이아웃</div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setLayout('radial')}
+            className={`px-2 py-1 text-xs rounded ${layout === 'radial' ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+          >
+            방사형
+          </button>
+          <button
+            onClick={() => setLayout('tree')}
+            className={`px-2 py-1 text-xs rounded ${layout === 'tree' ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+          >
+            트리
+          </button>
+          <button
+            onClick={() => setLayout('horizontal')}
+            className={`px-2 py-1 text-xs rounded ${layout === 'horizontal' ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+          >
+            수평
+          </button>
         </div>
       </div>
+
+      {/* Help Toggle Button */}
+      <button
+        onClick={() => setShowHelp(!showHelp)}
+        className="absolute top-4 right-4 w-8 h-8 bg-white/90 backdrop-blur rounded-lg shadow-md flex items-center justify-center text-gray-600 hover:bg-gray-100"
+        title="도움말"
+      >
+        ?
+      </button>
+
+      {/* Help Panel - Collapsible */}
+      {showHelp && (
+        <div className="absolute top-14 right-4 bg-white/95 backdrop-blur p-3 rounded-lg shadow-md text-sm text-gray-600 max-w-xs z-10">
+          <div className="font-semibold mb-2 text-gray-900">⌨️ 컨트롤</div>
+          <div className="space-y-1 text-xs">
+            <div className="font-medium text-gray-700">마우스</div>
+            <div>• 드래그: 화면/노드 이동</div>
+            <div>• 스크롤: 확대/축소</div>
+            <div>• 클릭: 선택 | 더블클릭: 편집</div>
+            <div>• 우클릭: 하위 노드 추가</div>
+            <div className="font-medium text-gray-700 mt-2">키보드</div>
+            <div>• ↑↓←→: 노드 탐색</div>
+            <div>• Enter: 편집 | +: 추가</div>
+            <div>• Delete: 삭제</div>
+          </div>
+        </div>
+      )}
 
       {editingNode && (
         <EditNodeModal

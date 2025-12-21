@@ -9,7 +9,7 @@ export async function generateWithGemini(prompt: string, options?: {
 }): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({
-      model: options?.model || 'gemini-2.5-pro',
+      model: options?.model || 'gemini-3-pro-preview',
     });
 
     const generationConfig = {

@@ -16,6 +16,16 @@ interface MindMapNode {
   children?: MindMapNode[];
 }
 
+// Helper function to count nodes
+const countNodes = (node: MindMapNode): number => {
+  if (!node) return 0;
+  let count = 1;
+  if (node.children) {
+    node.children.forEach(child => { count += countNodes(child); });
+  }
+  return count;
+};
+
 export default function MindmapPage() {
   const [mindmaps, setMindmaps] = useState<any[]>([]);
   const [selectedMindmap, setSelectedMindmap] = useState<any | null>(null);
@@ -354,6 +364,9 @@ export default function MindmapPage() {
                         {map.title}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
+                        {countNodes(map.structure)}개 노드
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
                         {new Date(map.createdAt).toLocaleDateString('ko-KR')}
                       </div>
                     </div>

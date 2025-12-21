@@ -5,7 +5,9 @@ import { useParams } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import Markdown from '@/components/ui/markdown';
 import { api } from '@/lib/api/client';
+import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 export default function CurriculumDetailPage() {
   const params = useParams();
@@ -16,6 +18,8 @@ export default function CurriculumDetailPage() {
   const [concepts, setConcepts] = useState<{ [key: string]: any }>({});
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
   const [generationMode, setGenerationMode] = useState<'encyclopedia' | 'conversational'>('conversational');
+  const [markdownView, setMarkdownView] = useState<{ [key: string]: boolean }>({});
+  const [togglingTopic, setTogglingTopic] = useState<string | null>(null);
 
   useEffect(() => {
     loadCurriculum();
@@ -119,6 +123,33 @@ export default function CurriculumDetailPage() {
       alert('플래시카드 생성에 실패했습니다');
     } finally {
       setGeneratingFlashcards(null);
+    }
+  };
+
+  const handleToggleComplete = async (topicId: string) => {
+    if (!curriculum) return;
+    setTogglingTopic(topicId);
+    const isCompleted = curriculum.progress.completedTopics.includes(topicId);
+    try {
+      const response = await fetch(`/api/curriculums/${curriculum._id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-storage') ? JSON.parse(localStorage.getItem('auth-storage')!).state.token : ''}`,
+        },
+        body: JSON.stringify({ topicId, completed: !isCompleted }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCurriculum((prev: any) => ({
+          ...prev,
+          progress: { ...prev.progress, completedTopics: data.data.completedTopics, overallPercentage: data.data.overallPercentage }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to toggle completion:', error);
+    } finally {
+      setTogglingTopic(null);
     }
   };
 
@@ -236,20 +267,33 @@ export default function CurriculumDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {module.topics.map((topic: any, topicIndex: number) => (
+                  {module.topics.map((topic: any, topicIndex: number) => {
+                    const isCompleted = curriculum.progress.completedTopics.includes(topic.topicId);
+                    return (
                     <div key={topic.topicId} className="border border-gray-200 rounded-lg overflow-hidden">
                       <div className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition">
                         <div className="flex items-center gap-3 flex-1">
+                          <button
+                            onClick={() => handleToggleComplete(topic.topicId)}
+                            disabled={togglingTopic === topic.topicId}
+                            className="flex-shrink-0 focus:outline-none"
+                            title={isCompleted ? '학습 완료 취소' : '학습 완료로 표시'}
+                          >
+                            {togglingTopic === topic.topicId ? (
+                              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+                            ) : isCompleted ? (
+                              <CheckCircle2 className="w-6 h-6 text-green-500" />
+                            ) : (
+                              <Circle className="w-6 h-6 text-gray-300 hover:text-gray-400" />
+                            )}
+                          </button>
                           <span className="text-sm text-gray-500">
                             {moduleIndex + 1}.{topicIndex + 1}
                           </span>
                           <div className="flex-1">
-                            <div className="font-medium text-gray-900">{topic.title}</div>
-                            {curriculum.progress.completedTopics.includes(topic.topicId) && (
-                              <span className="text-xs text-green-600">✓ 완료</span>
-                            )}
+                            <div className={`font-medium ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{topic.title}</div>
                             {concepts[topic.title] && (
-                              <span className="text-xs text-blue-600 ml-2">💡 개념 생성됨</span>
+                              <span className="text-xs text-blue-600">💡 개념 생성됨</span>
                             )}
                           </div>
                         </div>
@@ -278,11 +322,29 @@ export default function CurriculumDetailPage() {
                       {expandedTopic === topic.topicId && concepts[topic.title] && (
                         <div className="p-6 bg-white border-t border-gray-200">
                           <div className="prose max-w-none">
-                            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                              {concepts[topic.title].title}
-                            </h3>
-                            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                              {concepts[topic.title].content.text}
+                            <div className="flex justify-between items-center mb-4">
+                              <h3 className="text-lg font-semibold text-gray-900 m-0">
+                                {concepts[topic.title].title}
+                              </h3>
+                              <button
+                                onClick={() => setMarkdownView(prev => ({ ...prev, [topic.title]: !prev[topic.title] }))}
+                                className={`px-3 py-1 text-xs rounded-full transition ${
+                                  markdownView[topic.title]
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
+                              >
+                                {markdownView[topic.title] ? '📝 마크다운' : '📄 원본'}
+                              </button>
+                            </div>
+                            <div className="bg-gray-50 rounded-lg p-4 overflow-auto max-h-[500px]">
+                              {markdownView[topic.title] ? (
+                                <Markdown content={concepts[topic.title].content.text} />
+                              ) : (
+                                <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                  {concepts[topic.title].content.text}
+                                </div>
+                              )}
                             </div>
                             {concepts[topic.title].content.code && (
                               <pre className="mt-4 p-4 bg-gray-900 text-gray-100 rounded-lg overflow-x-auto">
@@ -300,7 +362,8 @@ export default function CurriculumDetailPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </CardContent>
             </Card>

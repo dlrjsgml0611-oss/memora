@@ -72,8 +72,8 @@ export async function generateWithOpenAI(prompt: string, options?: {
 }): Promise<string> {
   try {
     const completion = await openai.responses.create({
-      model: options?.model || 'gpt-5-mini',
-      reasoning: {"effort": "minimal"},
+      model: options?.model || 'gpt-5.1',
+      reasoning: {"effort": "low"},
       input: prompt,
       //temperature: options?.temperature || 0.7,
     });
@@ -117,7 +117,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
 
 Return ONLY the JSON object, nothing else.`;
 
-  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 4000 });
+  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 10000 });
 
   try {
     // Remove markdown code blocks if present
@@ -216,7 +216,7 @@ export async function generateConceptWithOpenAI(
 개념 설명:`;
   }
 
-  return generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 3000 });
+  return generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 10000 });
 }
 
 export async function generateFlashcardsWithOpenAI(conceptText: string, count: number = 5): Promise<Array<{ front: string; back: string; hint?: string }>> {
@@ -235,7 +235,7 @@ Provide the flashcards in JSON format as an array:
 
 Make the flashcards focused on key concepts and facts.`;
 
-  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 2000 });
+  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 5000 });
 
   try {
     const jsonMatch = response.match(/\[[\s\S]*\]/);
@@ -293,7 +293,7 @@ ${conceptContent}
 
 마인드맵 구조:`;
 
-  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 3000 });
+  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 5000 });
 
   try {
     // Remove markdown code blocks if present
@@ -369,7 +369,7 @@ ${conceptContent}
 
 기억의 궁전:`;
 
-  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 3000 });
+  const response = await generateWithOpenAI(prompt, { temperature: 0.7, maxTokens: 5000 });
 
   try {
     // Remove markdown code blocks if present
@@ -433,7 +433,7 @@ ${content}
 
 기억술:`;
 
-  return generateWithOpenAI(prompt, { temperature: 0.8, maxTokens: 2000 });
+  return generateWithOpenAI(prompt, { temperature: 0.8, maxTokens: 5000 });
 }
 
 export default openai;
