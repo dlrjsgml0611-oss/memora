@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import connectDB from '@/lib/db/mongodb';
-import { Flashcard, Review, User } from '@/lib/db/models';
+import { Flashcard, Review } from '@/lib/db/models';
 import { getUserFromRequest } from '@/lib/auth/middleware';
 import { reviewFlashcardSchema } from '@/lib/utils/validators';
 import { scheduleReview } from '@/lib/srs/scheduler';
+import { refreshUserLearningStats } from '@/lib/stats/userStats';
 import {
   successResponse,
   errorResponse,
@@ -31,7 +32,15 @@ export async function POST(req: NextRequest) {
       return validationErrorResponse(validation.error.issues);
     }
 
-    const { flashcardId, rating, responseTime } = validation.data;
+    const {
+      flashcardId,
+      rating,
+      responseTime,
+      sessionId,
+      aiScore,
+      recommendedRating,
+      errorType,
+    } = validation.data;
 
     // Find flashcard
     const flashcard = await Flashcard.findById(flashcardId);
@@ -59,25 +68,39 @@ export async function POST(req: NextRequest) {
     const totalTime = flashcard.stats.averageResponseTime * (flashcard.stats.totalReviews - 1) + responseTime;
     flashcard.stats.averageResponseTime = Math.round(totalTime / flashcard.stats.totalReviews);
 
+    if (rating <= 2) {
+      flashcard.mistakeCount = (flashcard.mistakeCount || 0) + 1;
+      flashcard.lastErrorType = errorType || flashcard.lastErrorType || 'unknown';
+      flashcard.examWeight = Math.min((flashcard.examWeight || 1) + 0.1, 5);
+    } else {
+      flashcard.mistakeCount = Math.max((flashcard.mistakeCount || 0) - 1, 0);
+      flashcard.examWeight = Math.max((flashcard.examWeight || 1) - 0.05, 0.2);
+    }
+
     await flashcard.save();
 
     // Create review record
     const review = await Review.create({
       userId: authUser.userId,
       flashcardId,
+      sessionId: sessionId || undefined,
       rating,
       responseTime,
+      aiScore,
+      recommendedRating,
+      finalRatingDiff:
+        recommendedRating && Number.isFinite(recommendedRating)
+          ? Math.abs(recommendedRating - rating)
+          : undefined,
       previousInterval,
       newInterval: srs.interval,
       reviewedAt: new Date(),
     });
 
-    // Update user stats
-    await User.findByIdAndUpdate(authUser.userId, {
-      $inc: {
-        'stats.cardsReviewed': 1,
-        'stats.totalStudyTime': Math.round(responseTime / 1000),
-      },
+    // Refresh engagement stats and rolling streak metrics
+    await refreshUserLearningStats(authUser.userId, {
+      reviewedIncrement: 1,
+      studyTimeIncrementSeconds: Math.round(responseTime / 1000),
     });
 
     return successResponse(

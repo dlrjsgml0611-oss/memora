@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Trash2, Edit, Play, Pause, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import EditItemModal from './EditItemModal';
+import { useFeedback } from '@/components/ui/feedback';
 
 interface Room {
   id: string;
@@ -25,6 +26,8 @@ interface MemoryItem {
 
 interface MemoryPalaceVisualizationProps {
   rooms: Room[];
+  activeRoomId?: string;
+  onActiveRoomChange?: (roomId: string) => void;
   onAddItem?: (roomId: string, item: Omit<MemoryItem, 'id'>) => void;
   onDeleteItem?: (roomId: string, itemId: string) => void;
   onUpdateItem?: (roomId: string, itemId: string, data: {
@@ -44,6 +47,8 @@ type ViewPreset = 'front' | 'top' | 'side' | 'isometric';
 
 export default function MemoryPalaceVisualization({
   rooms,
+  activeRoomId,
+  onActiveRoomChange,
   onAddItem,
   onDeleteItem,
   onUpdateItem,
@@ -51,6 +56,7 @@ export default function MemoryPalaceVisualization({
   onUpdateRoom,
   onDeleteRoom
 }: MemoryPalaceVisualizationProps) {
+  const feedback = useFeedback();
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<MemoryItem | null>(null);
@@ -91,13 +97,13 @@ export default function MemoryPalaceVisualization({
     const validRoomIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
     const currentRoom = rooms[validRoomIndex];
     if (!currentRoom || currentRoom.items.length === 0) {
-      alert('이 방에 기억 항목이 없습니다.');
+      feedback.info('이 방에 기억 항목이 없습니다. 먼저 항목을 추가해 주세요.');
       return;
     }
     setIsTourMode(true);
     setTourItemIndex(0);
     setSelectedItem(currentRoom.items[0].id);
-  }, [rooms, currentRoomIndex]);
+  }, [rooms, currentRoomIndex, feedback]);
 
   const stopTour = useCallback(() => {
     setIsTourMode(false);
@@ -159,17 +165,24 @@ export default function MemoryPalaceVisualization({
     setSelectedItem(null);
   }, [rooms]);
 
-  const handleDeleteItem = useCallback((itemId: string) => {
+  const handleDeleteItem = useCallback(async (itemId: string) => {
     if (!rooms || rooms.length === 0) return;
     const validRoomIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
     const currentRoom = rooms[validRoomIndex];
     if (!currentRoom) return;
 
-    if (confirm('이 기억 항목을 삭제하시겠습니까?')) {
-      onDeleteItem?.(currentRoom.id, itemId);
-      setSelectedItem(null);
-    }
-  }, [rooms, currentRoomIndex, onDeleteItem]);
+    const confirmed = await feedback.confirm({
+      title: '기억 항목을 삭제할까요?',
+      description: '삭제한 항목은 복구할 수 없습니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+    onDeleteItem?.(currentRoom.id, itemId);
+    setSelectedItem(null);
+  }, [rooms, currentRoomIndex, onDeleteItem, feedback]);
 
   // Ensure currentRoomIndex stays within valid bounds when rooms change
   useEffect(() => {
@@ -177,6 +190,16 @@ export default function MemoryPalaceVisualization({
       setCurrentRoomIndex(0);
     }
   }, [rooms, currentRoomIndex]);
+
+  // Sync from parent-selected room
+  useEffect(() => {
+    if (!rooms || rooms.length === 0 || !activeRoomId) return;
+    const nextIndex = rooms.findIndex((room) => room.id === activeRoomId);
+    if (nextIndex >= 0 && nextIndex !== currentRoomIndex) {
+      setCurrentRoomIndex(nextIndex);
+      setSelectedItem(null);
+    }
+  }, [activeRoomId, rooms, currentRoomIndex]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -210,7 +233,7 @@ export default function MemoryPalaceVisualization({
         case 'Backspace':
           if (selectedItem) {
             e.preventDefault();
-            handleDeleteItem(selectedItem);
+            void handleDeleteItem(selectedItem);
           }
           break;
         case 'Escape':
@@ -223,6 +246,14 @@ export default function MemoryPalaceVisualization({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [rooms, selectedItem, editingItem, showAddForm, showAddRoomForm, showEditRoomForm, goToPreviousRoom, goToNextRoom, handleDeleteItem]);
+
+  useEffect(() => {
+    if (!rooms || rooms.length === 0 || !onActiveRoomChange) return;
+    const syncIndex = Math.max(0, Math.min(currentRoomIndex, rooms.length - 1));
+    const room = rooms[syncIndex];
+    if (!room) return;
+    onActiveRoomChange(room.id);
+  }, [rooms, currentRoomIndex, onActiveRoomChange]);
 
   // Early returns AFTER all Hooks
   if (!rooms || rooms.length === 0) {
@@ -328,7 +359,7 @@ export default function MemoryPalaceVisualization({
 
   const handleAddRoom = () => {
     if (!newRoomName.trim()) {
-      alert('방 이름을 입력하세요');
+      feedback.warning('방 이름을 입력하세요.');
       return;
     }
 
@@ -347,7 +378,7 @@ export default function MemoryPalaceVisualization({
 
   const handleUpdateRoom = () => {
     if (!newRoomName.trim()) {
-      alert('방 이름을 입력하세요');
+      feedback.warning('방 이름을 입력하세요.');
       return;
     }
 
@@ -360,18 +391,25 @@ export default function MemoryPalaceVisualization({
     setShowEditRoomForm(false);
   };
 
-  const handleDeleteRoom = () => {
+  const handleDeleteRoom = async () => {
     if (rooms.length <= 1) {
-      alert('마지막 방은 삭제할 수 없습니다');
+      feedback.warning('마지막 방은 삭제할 수 없습니다.');
       return;
     }
 
-    if (confirm('이 방과 모든 기억을 삭제하시겠습니까?')) {
-      onDeleteRoom?.(currentRoom.id);
-      // Move to previous room if current room is being deleted
-      const newIndex = Math.min(currentRoomIndex, rooms.length - 2);
-      setCurrentRoomIndex(Math.max(0, newIndex));
-    }
+    const confirmed = await feedback.confirm({
+      title: '방을 삭제할까요?',
+      description: '이 방에 있는 모든 기억 항목도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    onDeleteRoom?.(currentRoom.id);
+    // Move to previous room if current room is being deleted
+    const newIndex = Math.min(currentRoomIndex, rooms.length - 2);
+    setCurrentRoomIndex(Math.max(0, newIndex));
   };
 
   const openEditRoomForm = () => {

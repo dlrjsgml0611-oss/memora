@@ -114,6 +114,14 @@ npm run build
 npm start
 ```
 
+### 개발 검증 명령
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run build:webpack
+```
+
 ## 프로젝트 구조
 
 ```
@@ -159,9 +167,12 @@ memora/
 ```
 POST /api/auth/register  - 회원가입
 POST /api/auth/login     - 로그인
+POST /api/auth/logout    - 로그아웃
 GET  /api/auth/me        - 사용자 정보 조회
 PUT  /api/auth/me        - 사용자 정보 수정
 ```
+
+인증은 `HttpOnly` 쿠키 기반으로 처리되며, 클라이언트 localStorage에 JWT를 저장하지 않습니다.
 
 ### 플래시카드 API
 ```

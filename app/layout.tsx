@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Providers from './providers'
 
 export const metadata: Metadata = {
   title: 'Memora - AI-Powered Learning Platform',
@@ -20,7 +21,7 @@ export default function RootLayout({
         />
       </head>
       <body style={{ fontFamily: "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif" }}>
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

@@ -4,10 +4,101 @@ import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { api } from '@/lib/api/client';
-import { Clock, Layers, Flame, Trophy, Target, BookOpen, Timer, Crown, Loader2, User, Mail, Calendar, CheckCircle2 } from 'lucide-react';
+import { Clock, Layers, Flame, Trophy, Target, BookOpen, Timer, Crown, Loader2, User, Mail, Calendar, CheckCircle2, Brain, BarChart3 } from 'lucide-react';
+
+interface MemoryPalaceSummary {
+  sessions: number;
+  totalItems: number;
+  correctItems: number;
+  accuracy: number;
+  totalDurationSec: number;
+}
+
+interface MemoryPalaceReviewRecord {
+  finishedAt: string;
+  totalItems: number;
+  correctItems: number;
+}
+
+interface MemoryPalaceWeeklyTrend {
+  weekKey: string;
+  weekLabel: string;
+  sessions: number;
+  totalItems: number;
+  accuracy: number;
+}
+
+function getWeekStart(dateInput: Date) {
+  const date = new Date(dateInput);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function formatWeekLabel(weekStart: Date) {
+  const end = new Date(weekStart);
+  end.setDate(end.getDate() + 6);
+  return `${weekStart.getMonth() + 1}/${weekStart.getDate()}-${end.getMonth() + 1}/${end.getDate()}`;
+}
+
+function buildMemoryPalaceWeeklyTrend(
+  items: MemoryPalaceReviewRecord[],
+  weeks = 8
+): MemoryPalaceWeeklyTrend[] {
+  const now = new Date();
+  const thisWeekStart = getWeekStart(now);
+  const buckets = new Map<string, { weekStart: Date; sessions: number; totalItems: number; correctItems: number }>();
+
+  for (let i = weeks - 1; i >= 0; i -= 1) {
+    const weekStart = new Date(thisWeekStart);
+    weekStart.setDate(thisWeekStart.getDate() - i * 7);
+    const key = weekStart.toISOString().split('T')[0];
+    buckets.set(key, {
+      weekStart,
+      sessions: 0,
+      totalItems: 0,
+      correctItems: 0,
+    });
+  }
+
+  items.forEach((item) => {
+    const finishedAt = new Date(item.finishedAt);
+    if (Number.isNaN(finishedAt.getTime())) return;
+
+    const weekStart = getWeekStart(finishedAt);
+    const key = weekStart.toISOString().split('T')[0];
+    const bucket = buckets.get(key);
+    if (!bucket) return;
+
+    bucket.sessions += 1;
+    bucket.totalItems += item.totalItems || 0;
+    bucket.correctItems += item.correctItems || 0;
+  });
+
+  return Array.from(buckets.entries()).map(([weekKey, value]) => ({
+    weekKey,
+    weekLabel: formatWeekLabel(value.weekStart),
+    sessions: value.sessions,
+    totalItems: value.totalItems,
+    accuracy: value.totalItems > 0
+      ? Math.round((value.correctItems / value.totalItems) * 1000) / 10
+      : 0,
+  }));
+}
 
 export default function StatsPage() {
   const [userData, setUserData] = useState<any>(null);
+  const [activity, setActivity] = useState<Record<string, number>>({});
+  const [memoryPalace, setMemoryPalace] = useState<MemoryPalaceSummary>({
+    sessions: 0,
+    totalItems: 0,
+    correctItems: 0,
+    accuracy: 0,
+    totalDurationSec: 0,
+  });
+  const [memoryPalaceTrend, setMemoryPalaceTrend] = useState<MemoryPalaceWeeklyTrend[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,8 +107,25 @@ export default function StatsPage() {
 
   const loadStats = async () => {
     try {
-      const response: any = await api.getMe();
-      if (response.success) setUserData(response.data);
+      const [userRes, activityRes, memoryReviewRes] = await Promise.all([
+        api.getMe(),
+        api.getActivityStats(),
+        api.getMemoryPalaceReviews(120),
+      ]);
+      if (userRes.success) setUserData(userRes.data);
+      if (activityRes.success) {
+        setActivity(activityRes.data.activity || {});
+        setMemoryPalace(activityRes.data.memoryPalace || {
+          sessions: 0,
+          totalItems: 0,
+          correctItems: 0,
+          accuracy: 0,
+          totalDurationSec: 0,
+        });
+      }
+      if (memoryReviewRes.success) {
+        setMemoryPalaceTrend(buildMemoryPalaceWeeklyTrend(memoryReviewRes.data?.items || []));
+      }
     } catch (error) {
       console.error('Failed to load stats:', error);
     } finally {
@@ -49,12 +157,42 @@ export default function StatsPage() {
         </div>
 
         {/* Overall Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-5">
           <StatCard title="총 학습 시간" value={`${totalHours}시간 ${totalMinutes}분`} icon={Clock} gradient="from-blue-500 to-cyan-400" />
           <StatCard title="복습한 카드" value={stats.cardsReviewed || 0} icon={Layers} gradient="from-emerald-500 to-teal-400" />
           <StatCard title="현재 스트릭" value={`${stats.currentStreak || 0}일`} icon={Flame} gradient="from-orange-500 to-amber-400" />
           <StatCard title="최장 스트릭" value={`${stats.longestStreak || 0}일`} icon={Trophy} gradient="from-violet-500 to-purple-400" />
+          <StatCard title="7일 유지율" value={`${stats.sevenDayRetention || 0}%`} icon={Target} gradient="from-indigo-500 to-blue-400" />
+          <StatCard title="주간 활동일" value={`${stats.weeklyActiveDays || 0}일`} icon={Calendar} gradient="from-cyan-500 to-sky-400" />
+          <StatCard title="궁전 회상 세션" value={memoryPalace.sessions || 0} icon={Brain} gradient="from-amber-500 to-orange-400" />
         </div>
+
+        {/* Activity Heatmap */}
+        <Card className="border-0 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-emerald-500" />
+              학습 활동
+            </CardTitle>
+            <CardDescription>지난 1년간의 학습 기록</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ActivityHeatmap activity={activity} memoryPalace={memoryPalace} />
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-amber-500" />
+              기억의 궁전 주간 추세
+            </CardTitle>
+            <CardDescription>최근 8주 세션 수와 정답률 흐름</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WeeklyMemoryPalaceTrend trend={memoryPalaceTrend} />
+          </CardContent>
+        </Card>
 
         {/* Streak Card */}
         <Card className="border-0 shadow-lg overflow-hidden">
@@ -188,6 +326,156 @@ function Achievement({ title, description, achieved, icon: Icon }: { title: stri
       </div>
       <h4 className="font-semibold text-slate-800">{title}</h4>
       <p className="text-xs text-slate-500 mt-1">{description}</p>
+    </div>
+  );
+}
+
+function ActivityHeatmap({
+  activity,
+  memoryPalace,
+}: {
+  activity: Record<string, number>;
+  memoryPalace: {
+    sessions: number;
+    totalItems: number;
+    correctItems: number;
+    accuracy: number;
+    totalDurationSec: number;
+  };
+}) {
+  const weeks = 53;
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+
+  const getColor = (count: number) => {
+    if (count === 0) return 'bg-slate-100';
+    if (count <= 2) return 'bg-emerald-200';
+    if (count <= 5) return 'bg-emerald-300';
+    if (count <= 10) return 'bg-emerald-400';
+    return 'bg-emerald-500';
+  };
+
+  const generateDates = () => {
+    const result: { date: string; count: number; dayOfWeek: number }[][] = [];
+    const today = new Date();
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - (weeks * 7) + (6 - today.getDay()));
+
+    for (let w = 0; w < weeks; w++) {
+      const week: { date: string; count: number; dayOfWeek: number }[] = [];
+      for (let d = 0; d < 7; d++) {
+        const date = new Date(startDate);
+        date.setDate(startDate.getDate() + w * 7 + d);
+        const dateStr = date.toISOString().split('T')[0];
+        week.push({
+          date: dateStr,
+          count: activity[dateStr] || 0,
+          dayOfWeek: d,
+        });
+      }
+      result.push(week);
+    }
+    return result;
+  };
+
+  const data = generateDates();
+  const totalReviews = Object.values(activity).reduce((a, b) => a + b, 0);
+  const activeDays = Object.keys(activity).length;
+  const palaceMinutes = Math.round((memoryPalace.totalDurationSec || 0) / 60);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-6 text-sm">
+        <div><span className="text-slate-500">총 활동:</span> <span className="font-semibold">{totalReviews}회</span></div>
+        <div><span className="text-slate-500">활동일:</span> <span className="font-semibold">{activeDays}일</span></div>
+        <div><span className="text-slate-500">궁전 회상:</span> <span className="font-semibold">{memoryPalace.sessions}세션</span></div>
+        <div><span className="text-slate-500">궁전 정답률:</span> <span className="font-semibold">{memoryPalace.accuracy || 0}%</span></div>
+        <div><span className="text-slate-500">궁전 학습시간:</span> <span className="font-semibold">{palaceMinutes}분</span></div>
+      </div>
+      <div className="overflow-x-auto pb-2">
+        <div className="flex gap-1 min-w-max">
+          <div className="flex flex-col gap-1 mr-2 text-xs text-slate-400">
+            {days.map((d, i) => (
+              <div key={i} className="h-3 flex items-center">{i % 2 === 1 ? d : ''}</div>
+            ))}
+          </div>
+          {data.map((week, wi) => (
+            <div key={wi} className="flex flex-col gap-1">
+              {week.map((day, di) => (
+                <div
+                  key={di}
+                  className={`w-3 h-3 rounded-sm ${getColor(day.count)} cursor-pointer transition-transform hover:scale-125`}
+                  title={`${day.date}: ${day.count}회 복습`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-slate-500">
+        <span>적음</span>
+        {['bg-slate-100', 'bg-emerald-200', 'bg-emerald-300', 'bg-emerald-400', 'bg-emerald-500'].map((c, i) => (
+          <div key={i} className={`w-3 h-3 rounded-sm ${c}`} />
+        ))}
+        <span>많음</span>
+      </div>
+    </div>
+  );
+}
+
+function WeeklyMemoryPalaceTrend({ trend }: { trend: MemoryPalaceWeeklyTrend[] }) {
+  const maxSessions = Math.max(...trend.map((item) => item.sessions), 1);
+  const latest = trend[trend.length - 1];
+  const previous = trend[trend.length - 2];
+  const weekDelta = latest && previous ? latest.sessions - previous.sessions : 0;
+
+  if (trend.length === 0 || trend.every((item) => item.sessions === 0)) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+        아직 주간 회상 데이터가 충분하지 않습니다. 기억의 궁전에서 회상 훈련을 시작해 보세요.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-amber-50 p-3">
+          <p className="text-xs text-slate-500">이번 주 세션</p>
+          <p className="text-xl font-bold text-slate-900">{latest?.sessions || 0}회</p>
+        </div>
+        <div className="rounded-xl bg-emerald-50 p-3">
+          <p className="text-xs text-slate-500">이번 주 정답률</p>
+          <p className="text-xl font-bold text-slate-900">{latest?.accuracy || 0}%</p>
+        </div>
+        <div className="rounded-xl bg-blue-50 p-3">
+          <p className="text-xs text-slate-500">전주 대비 세션</p>
+          <p className={`text-xl font-bold ${weekDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {weekDelta >= 0 ? `+${weekDelta}` : weekDelta}
+          </p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto pb-2">
+        <div className="flex min-w-[620px] items-end gap-3">
+          {trend.map((item) => (
+            <div key={item.weekKey} className="flex-1">
+              <div className="mb-2 h-28 rounded-lg bg-slate-100 p-1">
+                <div
+                  className="flex w-full items-start justify-center rounded-md bg-gradient-to-t from-amber-500 to-orange-400 pt-1 text-[10px] font-semibold text-white transition-all"
+                  style={{
+                    height: `${Math.max((item.sessions / maxSessions) * 100, item.sessions > 0 ? 12 : 0)}%`,
+                  }}
+                  title={`${item.weekLabel}: ${item.sessions}회, 정답률 ${item.accuracy}%`}
+                >
+                  {item.sessions > 0 ? item.sessions : ''}
+                </div>
+              </div>
+              <p className="text-center text-[11px] text-slate-500">{item.weekLabel}</p>
+              <p className="text-center text-xs font-medium text-slate-700">{item.accuracy}%</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

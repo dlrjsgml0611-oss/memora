@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from './jwt';
 import { JWTPayload } from '@/types';
+import { getAuthTokenFromRequest } from './cookies';
 
 export interface AuthenticatedRequest extends NextRequest {
   user?: JWTPayload;
@@ -10,16 +11,14 @@ export function withAuth(
   handler: (req: AuthenticatedRequest) => Promise<NextResponse>
 ) {
   return async (req: NextRequest) => {
-    const authHeader = req.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = getAuthToken(req);
+    if (!token) {
       return NextResponse.json(
-        { success: false, error: 'No authorization token provided' },
+        { success: false, error: 'No session token provided' },
         { status: 401 }
       );
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     const payload = verifyToken(token);
 
     if (!payload) {
@@ -38,13 +37,7 @@ export function withAuth(
 }
 
 export function getAuthToken(req: NextRequest): string | null {
-  const authHeader = req.headers.get('authorization');
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  return authHeader.substring(7);
+  return getAuthTokenFromRequest(req);
 }
 
 export function getUserFromRequest(req: NextRequest): JWTPayload | null {

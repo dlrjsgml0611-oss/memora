@@ -1,7 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import connectDB from '@/lib/db/mongodb';
 import { MemoryPalace } from '@/lib/db/models/MemoryPalace';
 import { getUserFromRequest } from '@/lib/auth/middleware';
+import { normalizeMemoryPalaceDocumentV2, normalizePalaceV2 } from '@/lib/memory-palace/v2';
+import { updateMemoryPalaceSchema } from '@/lib/utils/validators';
+import {
+  codedErrorResponse,
+  notFoundResponse,
+  successResponse,
+  unauthorizedResponse,
+  validationErrorResponse,
+} from '@/lib/utils/response';
 
 // GET - Get specific memory palace
 export async function GET(
@@ -11,7 +20,7 @@ export async function GET(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
@@ -24,22 +33,13 @@ export async function GET(
     });
 
     if (!palace) {
-      return NextResponse.json(
-        { success: false, error: 'Memory palace not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Memory palace');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: palace,
-    });
-  } catch (error: any) {
+    return successResponse(normalizeMemoryPalaceDocumentV2(palace.toObject()));
+  } catch (error) {
     console.error('Get memory palace error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get memory palace' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to get memory palace', 500);
   }
 }
 
@@ -51,48 +51,45 @@ export async function PATCH(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
-    const body = await req.json();
-    const { rooms } = body;
-
-    if (!rooms) {
-      return NextResponse.json(
-        { success: false, error: 'Rooms are required' },
-        { status: 400 }
-      );
+    const body = await req.json().catch(() => ({}));
+    const validation = updateMemoryPalaceSchema.safeParse(body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error.issues);
     }
+    const palaceV2 = normalizePalaceV2(validation.data.palace ?? validation.data.rooms);
 
     await connectDB();
+
+    const existingPalace = await MemoryPalace.findOne({
+      _id: id,
+      userId: authUser.userId,
+    });
+
+    if (!existingPalace) {
+      return notFoundResponse('Memory palace');
+    }
 
     const palace = await MemoryPalace.findOneAndUpdate(
       {
         _id: id,
         userId: authUser.userId,
       },
-      { rooms },
+      { rooms: palaceV2 },
       { new: true }
     );
 
     if (!palace) {
-      return NextResponse.json(
-        { success: false, error: 'Memory palace not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Memory palace');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: palace,
-    });
-  } catch (error: any) {
+    return successResponse(normalizeMemoryPalaceDocumentV2(palace.toObject()));
+  } catch (error) {
     console.error('Update memory palace error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to update memory palace' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to update memory palace', 500);
   }
 }
 
@@ -104,7 +101,7 @@ export async function DELETE(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
@@ -117,21 +114,12 @@ export async function DELETE(
     });
 
     if (!palace) {
-      return NextResponse.json(
-        { success: false, error: 'Memory palace not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Memory palace');
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Memory palace deleted successfully',
-    });
-  } catch (error: any) {
+    return successResponse({ deleted: true }, 'Memory palace deleted successfully');
+  } catch (error) {
     console.error('Delete memory palace error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to delete memory palace' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to delete memory palace', 500);
   }
 }

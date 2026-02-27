@@ -15,6 +15,11 @@ const ReviewSchema = new Schema<IReview>(
       required: true,
       index: true,
     },
+    sessionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'StudySession',
+      index: true,
+    },
     rating: {
       type: Number,
       enum: [1, 2, 3, 4],
@@ -24,6 +29,20 @@ const ReviewSchema = new Schema<IReview>(
       type: Number,
       required: true,
       min: 0,
+    },
+    aiScore: {
+      type: Number,
+      min: 0,
+      max: 100,
+    },
+    recommendedRating: {
+      type: Number,
+      enum: [1, 2, 3, 4],
+    },
+    finalRatingDiff: {
+      type: Number,
+      min: 0,
+      max: 3,
     },
     previousInterval: {
       type: Number,
@@ -47,6 +66,7 @@ const ReviewSchema = new Schema<IReview>(
 // Indexes
 ReviewSchema.index({ userId: 1, reviewedAt: -1 });
 ReviewSchema.index({ flashcardId: 1, reviewedAt: -1 });
+ReviewSchema.index({ sessionId: 1, reviewedAt: -1 });
 
 export default mongoose.models.Review ||
   mongoose.model<IReview>('Review', ReviewSchema);

@@ -40,6 +40,40 @@ export async function GET(req: NextRequest) {
       query.conceptId = conceptId;
     }
 
+    // Search functionality
+    const search = searchParams.get('search');
+    if (search) {
+      query.$or = [
+        { front: { $regex: search, $options: 'i' } },
+        { back: { $regex: search, $options: 'i' } },
+        { hint: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    // Filter by state
+    const state = searchParams.get('state');
+    if (state && ['new', 'learning', 'review', 'relearning'].includes(state)) {
+      query['srs.state'] = state;
+    }
+
+    // Filter by type
+    const type = searchParams.get('type');
+    if (type && ['basic', 'cloze', 'image', 'code'].includes(type)) {
+      query.type = type;
+    }
+
+    // Filter by favorite
+    const favorite = searchParams.get('favorite');
+    if (favorite === 'true') {
+      query.isFavorite = true;
+    }
+
+    // Filter by tag
+    const tag = searchParams.get('tag');
+    if (tag) {
+      query.tags = tag;
+    }
+
     const total = await Flashcard.countDocuments(query);
     const flashcards = await Flashcard.find(query)
       .sort({ 'srs.nextReview': 1 })

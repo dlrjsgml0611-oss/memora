@@ -3,6 +3,7 @@ import connectDB from '@/lib/db/mongodb';
 import { User } from '@/lib/db/models';
 import { hashPassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
+import { setAuthCookie } from '@/lib/auth/cookies';
 import { registerSchema } from '@/lib/utils/validators';
 import {
   successResponse,
@@ -54,6 +55,8 @@ export async function POST(req: NextRequest) {
         cardsReviewed: 0,
         currentStreak: 0,
         longestStreak: 0,
+        sevenDayRetention: 0,
+        weeklyActiveDays: 0,
       },
     });
 
@@ -64,7 +67,6 @@ export async function POST(req: NextRequest) {
     });
 
     const response: AuthResponse = {
-      token,
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -72,7 +74,9 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    return successResponse(response, 'User registered successfully', 201);
+    const nextResponse = successResponse(response, 'User registered successfully', 201);
+    setAuthCookie(nextResponse, token);
+    return nextResponse;
   } catch (error) {
     console.error('Register error:', error);
     return errorResponse('Failed to register user', 500);

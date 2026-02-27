@@ -1,4 +1,10 @@
 import { Document, Types } from 'mongoose';
+import type {
+  CurriculumLearningMetaV2,
+  CurriculumModuleV2,
+  CurriculumQualityV2,
+  LegacyMemoryRoom,
+} from './learning-space';
 
 // ==================== User Types ====================
 export interface IUser extends Document {
@@ -20,6 +26,9 @@ export interface IUser extends Document {
     cardsReviewed: number;
     currentStreak: number;
     longestStreak: number;
+    sevenDayRetention: number;
+    weeklyActiveDays: number;
+    lastStudiedAt?: Date;
   };
   createdAt: Date;
   updatedAt: Date;
@@ -49,6 +58,10 @@ export interface ICurriculum extends Document {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   aiModel: string;
   structure: IModule[];
+  schemaVersion?: 'v2';
+  structureV2?: CurriculumModuleV2[];
+  learningMeta?: CurriculumLearningMetaV2;
+  quality?: CurriculumQualityV2;
   progress: {
     completedTopics: string[];
     currentModule: string;
@@ -61,12 +74,34 @@ export interface ICurriculum extends Document {
 // ==================== Concept Types ====================
 export interface IConcept extends Document {
   curriculumId: Types.ObjectId;
+  topicId?: string;
   title: string;
   content: {
     text: string;
     code?: string;
     images: string[];
     references: string[];
+    highlights?: Array<{
+      text: string;
+      weight: 1 | 2 | 3;
+      reason?: string;
+    }>;
+    visuals?: Array<{
+      id: string;
+      prompt: string;
+      url: string;
+      alt: string;
+      provider: 'openai' | 'claude' | 'gemini';
+      generatedAt: Date;
+      cacheKey?: string;
+      width?: number;
+      height?: number;
+    }>;
+    renderHints?: {
+      summary?: string;
+      readingLevel?: 'easy' | 'normal' | 'dense';
+      lastEnrichedAt?: Date;
+    };
   };
   aiGenerated: {
     model: string;
@@ -104,6 +139,11 @@ export interface IFlashcard extends Document {
   front: string;
   back: string;
   hint?: string;
+  tags?: string[];
+  isFavorite?: boolean;
+  lastErrorType?: 'concept' | 'careless' | 'memory' | 'unknown';
+  mistakeCount?: number;
+  examWeight?: number;
   srs: ISRSData;
   stats: IFlashcardStats;
   createdAt: Date;
@@ -114,11 +154,27 @@ export interface IFlashcard extends Document {
 export interface IReview extends Document {
   userId: Types.ObjectId;
   flashcardId: Types.ObjectId;
+  sessionId?: Types.ObjectId;
   rating: 1 | 2 | 3 | 4; // 1: Again, 2: Hard, 3: Good, 4: Easy
   responseTime: number;
+  aiScore?: number;
+  recommendedRating?: 1 | 2 | 3 | 4;
+  finalRatingDiff?: number;
   previousInterval: number;
   newInterval: number;
   reviewedAt: Date;
+}
+
+// ==================== AI Mnemonic Types ====================
+export interface IAIMnemonic extends Document {
+  userId: Types.ObjectId;
+  subject: 'history' | 'math' | 'science' | 'english' | 'custom';
+  technique: 'sequence' | 'story' | 'acronym' | 'association';
+  content: string;
+  mnemonic: string;
+  provider?: 'openai' | 'claude' | 'gemini';
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ==================== Mindmap Types ====================
@@ -167,9 +223,21 @@ export interface IMemoryPalace extends Document {
   userId: Types.ObjectId;
   curriculumId?: Types.ObjectId;
   title: string;
-  type: 'room' | 'building' | 'path' | 'custom';
-  backgroundImage?: string;
-  locations: IMemoryLocation[];
+  rooms: LegacyMemoryRoom[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IMemoryPalaceReview extends Document {
+  userId: Types.ObjectId;
+  palaceId: Types.ObjectId;
+  palaceTitle: string;
+  totalItems: number;
+  correctItems: number;
+  wrongItems: number;
+  accuracy: number;
+  durationSec: number;
+  finishedAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -177,13 +245,38 @@ export interface IMemoryPalace extends Document {
 // ==================== Study Session Types ====================
 export interface IStudySession extends Document {
   userId: Types.ObjectId;
-  type: 'review' | 'learn' | 'quiz';
+  type: 'review' | 'learn' | 'quiz' | 'exam';
+  mode: 'review' | 'exam';
+  source: 'today-mission' | 'manual' | 'exam';
+  status: 'active' | 'completed' | 'abandoned';
   curriculumId?: Types.ObjectId;
-  cardsReviewed: number;
+  cardQueue: Types.ObjectId[];
+  reviewedCardIds: Types.ObjectId[];
+  sessionMeta: {
+    maxCards?: number;
+    maxNew?: number;
+    weaknessBoost?: number;
+    timeLimitMinutes?: number;
+    filters?: {
+      conceptId?: string;
+      tag?: string;
+    };
+  };
+  metrics: {
+    totalCards: number;
+    reviewedCards: number;
+    correctCount: number;
+    incorrectCount: number;
+    avgResponseTime: number;
+    accuracy: number;
+  };
+  weaknessTags: string[];
+  completionReason?: 'completed' | 'user-exit' | 'timeout' | 'abandoned';
+  cardsReviewed: number; // legacy mirror of metrics.reviewedCards
   duration: number;
   accuracy: number;
   startedAt: Date;
-  completedAt: Date;
+  completedAt?: Date;
 }
 
 // ==================== API Types ====================
@@ -192,6 +285,8 @@ export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   message?: string;
+  code?: string;
+  details?: unknown;
 }
 
 export interface PaginationParams {
@@ -226,10 +321,11 @@ export interface RegisterRequest {
 }
 
 export interface AuthResponse {
-  token: string;
   user: {
     id: string;
     email: string;
     username: string;
   };
 }
+
+export * from './learning-space';

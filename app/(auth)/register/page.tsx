@@ -65,7 +65,7 @@ export default function RegisterPage() {
       const response: any = await api.register(email, password, username)
 
       if (response.success) {
-        login(response.data.token, response.data.user)
+        login(response.data.user)
         router.push('/dashboard')
       } else {
         setError(response.error || '회원가입에 실패했습니다')

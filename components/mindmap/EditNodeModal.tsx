@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useFeedback } from '@/components/ui/feedback';
 
 interface EditNodeModalProps {
   node: {
@@ -26,6 +27,7 @@ const EMOJI_LIST = [
 ];
 
 export default function EditNodeModal({ node, onClose, onSave, onDelete, canDelete = true }: EditNodeModalProps) {
+  const feedback = useFeedback();
   const [name, setName] = useState(node.name);
 
   // Determine if initial image is emoji or URL
@@ -44,7 +46,7 @@ export default function EditNodeModal({ node, onClose, onSave, onDelete, canDele
 
   const handleSave = () => {
     if (!name.trim()) {
-      alert('노드 이름을 입력하세요');
+      feedback.warning('노드 이름을 입력하세요.');
       return;
     }
     onSave(node.id, {
@@ -54,11 +56,18 @@ export default function EditNodeModal({ node, onClose, onSave, onDelete, canDele
     onClose();
   };
 
-  const handleDelete = () => {
-    if (confirm('이 노드를 삭제하시겠습니까? 하위 노드도 모두 삭제됩니다.')) {
-      onDelete?.(node.id);
-      onClose();
-    }
+  const handleDelete = async () => {
+    const confirmed = await feedback.confirm({
+      title: '노드를 삭제할까요?',
+      description: '하위 노드도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    onDelete?.(node.id);
+    onClose();
   };
 
   return (
@@ -159,7 +168,7 @@ export default function EditNodeModal({ node, onClose, onSave, onDelete, canDele
               저장
             </Button>
             {canDelete && onDelete && (
-              <Button variant="destructive" onClick={handleDelete}>
+              <Button variant="destructive" onClick={() => void handleDelete()}>
                 삭제
               </Button>
             )}

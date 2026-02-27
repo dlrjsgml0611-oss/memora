@@ -3,15 +3,26 @@ import connectDB from '@/lib/db/mongodb';
 import { Curriculum } from '@/lib/db/models';
 import { getUserFromRequest } from '@/lib/auth/middleware';
 import { aiRouter } from '@/lib/ai/router';
+import { normalizeCurriculumDocumentV2, normalizeGeneratedCurriculum } from '@/lib/curriculum/v2';
+import { createCurriculumSchema } from '@/lib/utils/validators';
 import {
-  successResponse,
+  codedErrorResponse,
+  createdResponse,
   errorResponse,
-  unauthorizedResponse,
   paginatedResponse,
+  rateLimitResponse,
+  unauthorizedResponse,
+  validationErrorResponse,
 } from '@/lib/utils/response';
+import { attachRateLimitHeaders, consumeUserRateLimit } from '@/lib/rate-limit';
 
 // Increase timeout for AI generation (5 minutes)
 export const maxDuration = 300;
+const AI_GENERATION_RATE_LIMIT = {
+  routeKey: 'ai:curriculum',
+  maxPerMinute: 10,
+  maxPerDay: 100,
+} as const;
 
 // GET /api/curriculums - Get all curriculums for the user
 export async function GET(req: NextRequest) {
@@ -39,12 +50,14 @@ export async function GET(req: NextRequest) {
     const curriculums = await Curriculum.find({ userId: authUser.userId })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .skip((page - 1) * limit);
+      .skip((page - 1) * limit)
+      .lean();
 
-    return paginatedResponse(curriculums, total, page, limit);
+    const normalized = curriculums.map((curriculum) => normalizeCurriculumDocumentV2(curriculum));
+    return paginatedResponse(normalized, total, page, limit);
   } catch (error) {
     console.error('Get curriculums error:', error);
-    return errorResponse('Failed to get curriculums', 500);
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to get curriculums', 500);
   }
 }
 
@@ -58,51 +71,74 @@ export async function POST(req: NextRequest) {
       return unauthorizedResponse();
     }
 
-    const body = await req.json();
-    const { goal, subject, difficulty = 'beginner', aiModel = 'openai' } = body;
-
-    if (!goal || !subject) {
-      return errorResponse('Goal and subject are required', 400);
+    const body = await req.json().catch(() => ({}));
+    const validation = createCurriculumSchema.safeParse(body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error.issues);
     }
 
-    // Generate curriculum using AI
-    const curriculumData = await aiRouter.generateCurriculum(
+    const {
       goal,
       subject,
-      difficulty,
-      aiModel as any
-    );
+      difficulty = 'beginner',
+      aiModel = 'openai',
+    } = validation.data;
 
-    // Create curriculum in database
+    const rateLimit = consumeUserRateLimit(authUser.userId, AI_GENERATION_RATE_LIMIT);
+    if (!rateLimit.allowed) {
+      console.info('[ai.generate]', {
+        route: '/api/curriculums',
+        userId: authUser.userId,
+        costType: 'curriculum',
+        result: 'deny',
+      });
+      const blocked = rateLimitResponse(
+        'AI curriculum generation limit exceeded. Please try again later.',
+        rateLimit.retryAfterSec
+      );
+      return attachRateLimitHeaders(blocked, rateLimit.headers);
+    }
+
+    console.info('[ai.generate]', {
+      route: '/api/curriculums',
+      userId: authUser.userId,
+      costType: 'curriculum',
+      result: 'allow',
+    });
+
+    const generated = await aiRouter.generateCurriculum(goal, subject, difficulty, aiModel);
+    const normalized = normalizeGeneratedCurriculum(generated);
+
     const curriculum = await Curriculum.create({
       userId: authUser.userId,
-      title: curriculumData.title,
-      description: curriculumData.description,
+      title: normalized.title,
+      description: normalized.description,
       subject,
       difficulty,
       aiModel,
-      structure: curriculumData.modules.map((module: any) => ({
-        moduleId: module.moduleId,
-        title: module.title,
-        order: module.order,
-        estimatedHours: module.estimatedHours || 0,
-        topics: module.topics.map((topic: any) => ({
-          topicId: topic.topicId,
-          title: topic.title,
-          order: topic.order,
-          conceptIds: [],
-        })),
-      })),
+      schemaVersion: normalized.schemaVersion,
+      structure: normalized.structure,
+      structureV2: normalized.structureV2,
+      learningMeta: normalized.learningMeta,
+      quality: normalized.quality,
       progress: {
         completedTopics: [],
-        currentModule: '',
+        currentModule: normalized.structure[0]?.moduleId || '',
         overallPercentage: 0,
       },
     });
 
-    return successResponse(curriculum, 'Curriculum created successfully', 201);
-  } catch (error) {
+    const response = createdResponse(
+      normalizeCurriculumDocumentV2(curriculum.toObject()),
+      'Curriculum created successfully'
+    );
+    return attachRateLimitHeaders(response, rateLimit.headers);
+  } catch (error: any) {
     console.error('Create curriculum error:', error);
-    return errorResponse('Failed to create curriculum', 500);
+    const message = typeof error?.message === 'string' ? error.message : 'Failed to create curriculum';
+    if (message.startsWith('Missing required environment variable:')) {
+      return codedErrorResponse('BAD_REQUEST', message, 400);
+    }
+    return codedErrorResponse('INTERNAL_ERROR', message, 500);
   }
 }

@@ -69,13 +69,28 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { front, back, hint, type } = body;
+    const {
+      front,
+      back,
+      hint,
+      type,
+      tags,
+      isFavorite,
+      lastErrorType,
+      mistakeCount,
+      examWeight,
+    } = body;
 
     // Update fields
     if (front !== undefined) flashcard.front = front;
     if (back !== undefined) flashcard.back = back;
     if (hint !== undefined) flashcard.hint = hint;
     if (type !== undefined) flashcard.type = type;
+    if (tags !== undefined) flashcard.tags = tags;
+    if (isFavorite !== undefined) flashcard.isFavorite = isFavorite;
+    if (lastErrorType !== undefined) flashcard.lastErrorType = lastErrorType;
+    if (mistakeCount !== undefined) flashcard.mistakeCount = mistakeCount;
+    if (examWeight !== undefined) flashcard.examWeight = examWeight;
 
     await flashcard.save();
 

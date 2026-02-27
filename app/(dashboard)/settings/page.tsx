@@ -134,9 +134,9 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label htmlFor="preferredAI">선호하는 AI 모델</Label>
                 <select id="preferredAI" className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={formData.preferredAI} onChange={(e) => setFormData({ ...formData, preferredAI: e.target.value as any })}>
-                  <option value="openai">OpenAI GPT-4</option>
-                  <option value="claude">Anthropic Claude 3.5</option>
-                  <option value="gemini">Google Gemini Pro</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="claude">Anthropic</option>
+                  <option value="gemini">Google</option>
                 </select>
                 <p className="text-xs text-slate-400">커리큘럼 및 콘텐츠 생성에 사용할 기본 AI 모델</p>
               </div>

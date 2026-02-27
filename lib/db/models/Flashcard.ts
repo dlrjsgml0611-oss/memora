@@ -30,6 +30,29 @@ const FlashcardSchema = new Schema<IFlashcard>(
       type: String,
       default: '',
     },
+    tags: [{
+      type: String,
+      trim: true,
+    }],
+    isFavorite: {
+      type: Boolean,
+      default: false,
+    },
+    lastErrorType: {
+      type: String,
+      enum: ['concept', 'careless', 'memory', 'unknown'],
+      default: undefined,
+    },
+    mistakeCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    examWeight: {
+      type: Number,
+      default: 1,
+      min: 0,
+    },
     srs: {
       ease: { type: Number, default: 2.5 },
       interval: { type: Number, default: 0 },
@@ -57,6 +80,9 @@ const FlashcardSchema = new Schema<IFlashcard>(
 // Indexes
 FlashcardSchema.index({ userId: 1, 'srs.nextReview': 1 });
 FlashcardSchema.index({ conceptId: 1 });
+FlashcardSchema.index({ userId: 1, tags: 1 });
+FlashcardSchema.index({ userId: 1, isFavorite: 1 });
+FlashcardSchema.index({ userId: 1, examWeight: -1, mistakeCount: -1 });
 
 export default mongoose.models.Flashcard ||
   mongoose.model<IFlashcard>('Flashcard', FlashcardSchema);

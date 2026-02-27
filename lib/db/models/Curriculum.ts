@@ -55,7 +55,21 @@ const CurriculumSchema = new Schema<ICurriculum>(
       type: String,
       required: true,
     },
+    schemaVersion: {
+      type: String,
+      enum: ['v2'],
+      default: 'v2',
+    },
     structure: [ModuleSchema],
+    structureV2: {
+      type: Schema.Types.Mixed,
+    },
+    learningMeta: {
+      type: Schema.Types.Mixed,
+    },
+    quality: {
+      type: Schema.Types.Mixed,
+    },
     progress: {
       completedTopics: [{ type: String }],
       currentModule: { type: String, default: '' },

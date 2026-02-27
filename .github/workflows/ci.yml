@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci-test-secret-key-ci-test-secret-key
+      MONGODB_URI: mongodb://127.0.0.1:27017/memora
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and Integration Tests
+        run: npm run test
+
+      - name: Build (webpack)
+        run: npm run build:webpack
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E Smoke Tests
+        run: npm run test:e2e

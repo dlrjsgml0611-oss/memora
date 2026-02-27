@@ -3,6 +3,7 @@ import connectDB from '@/lib/db/mongodb';
 import { User } from '@/lib/db/models';
 import { comparePassword } from '@/lib/auth/password';
 import { signToken } from '@/lib/auth/jwt';
+import { setAuthCookie } from '@/lib/auth/cookies';
 import { loginSchema } from '@/lib/utils/validators';
 import {
   successResponse,
@@ -45,7 +46,6 @@ export async function POST(req: NextRequest) {
     });
 
     const response: AuthResponse = {
-      token,
       user: {
         id: user._id.toString(),
         email: user.email,
@@ -53,7 +53,9 @@ export async function POST(req: NextRequest) {
       },
     };
 
-    return successResponse(response, 'Login successful');
+    const nextResponse = successResponse(response, 'Login successful');
+    setAuthCookie(nextResponse, token);
+    return nextResponse;
   } catch (error) {
     console.error('Login error:', error);
     return errorResponse('Failed to login', 500);

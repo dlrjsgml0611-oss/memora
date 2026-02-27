@@ -42,6 +42,9 @@ const UserSchema = new Schema<IUser>(
       cardsReviewed: { type: Number, default: 0 },
       currentStreak: { type: Number, default: 0 },
       longestStreak: { type: Number, default: 0 },
+      sevenDayRetention: { type: Number, default: 0 },
+      weeklyActiveDays: { type: Number, default: 0 },
+      lastStudiedAt: { type: Date },
     },
   },
   {

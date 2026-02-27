@@ -1,7 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import connectDB from '@/lib/db/mongodb';
 import { Mindmap } from '@/lib/db/models/Mindmap';
 import { getUserFromRequest } from '@/lib/auth/middleware';
+import { normalizeMindmapDocumentV2, normalizeMindmapV2 } from '@/lib/mindmap/v2';
+import { updateMindmapSchema } from '@/lib/utils/validators';
+import {
+  codedErrorResponse,
+  notFoundResponse,
+  successResponse,
+  unauthorizedResponse,
+  validationErrorResponse,
+} from '@/lib/utils/response';
 
 // GET - Get specific mindmap
 export async function GET(
@@ -11,7 +20,7 @@ export async function GET(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
@@ -24,22 +33,13 @@ export async function GET(
     });
 
     if (!mindmap) {
-      return NextResponse.json(
-        { success: false, error: 'Mindmap not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Mindmap');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: mindmap,
-    });
-  } catch (error: any) {
+    return successResponse(normalizeMindmapDocumentV2(mindmap.toObject()));
+  } catch (error) {
     console.error('Get mindmap error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to get mindmap' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to get mindmap', 500);
   }
 }
 
@@ -51,19 +51,16 @@ export async function PATCH(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
-    const body = await req.json();
-    const { structure } = body;
-
-    if (!structure) {
-      return NextResponse.json(
-        { success: false, error: 'Structure is required' },
-        { status: 400 }
-      );
+    const body = await req.json().catch(() => ({}));
+    const validation = updateMindmapSchema.safeParse(body);
+    if (!validation.success) {
+      return validationErrorResponse(validation.error.issues);
     }
+    const mindmapV2 = normalizeMindmapV2(validation.data.mindmap ?? validation.data.structure);
 
     await connectDB();
 
@@ -72,27 +69,18 @@ export async function PATCH(
         _id: id,
         userId: authUser.userId,
       },
-      { structure },
+      { structure: mindmapV2 },
       { new: true }
     );
 
     if (!mindmap) {
-      return NextResponse.json(
-        { success: false, error: 'Mindmap not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Mindmap');
     }
 
-    return NextResponse.json({
-      success: true,
-      data: mindmap,
-    });
-  } catch (error: any) {
+    return successResponse(normalizeMindmapDocumentV2(mindmap.toObject()));
+  } catch (error) {
     console.error('Update mindmap error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to update mindmap' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to update mindmap', 500);
   }
 }
 
@@ -104,7 +92,7 @@ export async function DELETE(
   try {
     const authUser = getUserFromRequest(req);
     if (!authUser) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return unauthorizedResponse();
     }
 
     const { id } = await params;
@@ -117,21 +105,12 @@ export async function DELETE(
     });
 
     if (!mindmap) {
-      return NextResponse.json(
-        { success: false, error: 'Mindmap not found' },
-        { status: 404 }
-      );
+      return notFoundResponse('Mindmap');
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Mindmap deleted successfully',
-    });
-  } catch (error: any) {
+    return successResponse({ deleted: true }, 'Mindmap deleted successfully');
+  } catch (error) {
     console.error('Delete mindmap error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Failed to delete mindmap' },
-      { status: 500 }
-    );
+    return codedErrorResponse('INTERNAL_ERROR', 'Failed to delete mindmap', 500);
   }
 }

@@ -105,6 +105,10 @@ export async function GET(req: NextRequest) {
       user: {
         totalStudyTime: user.stats.totalStudyTime,
         cardsReviewed: user.stats.cardsReviewed,
+        currentStreak: user.stats.currentStreak,
+        longestStreak: user.stats.longestStreak,
+        sevenDayRetention: user.stats.sevenDayRetention || 0,
+        weeklyActiveDays: user.stats.weeklyActiveDays || 0,
       },
     };
 

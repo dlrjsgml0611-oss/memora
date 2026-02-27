@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as d3 from 'd3';
 import EditNodeModal from './EditNodeModal';
+import { useFeedback } from '@/components/ui/feedback';
+import { hierarchyToMindmapV2, mindmapV2ToHierarchy } from '@/lib/mindmap/v2';
+import type { LegacyMindMapNode, MindmapV2 } from '@/types';
 
-interface MindMapNode {
-  id: string;
-  name: string;
-  image?: string;
+interface MindMapNode extends LegacyMindMapNode {
   children?: MindMapNode[];
   _children?: MindMapNode[];
   x?: number;
@@ -17,14 +17,28 @@ interface MindMapNode {
   fy?: number;
 }
 
+type MindMapInput = LegacyMindMapNode | MindmapV2;
+
+function isMindmapV2(data: MindMapInput): data is MindmapV2 {
+  return Array.isArray((data as MindmapV2).nodes);
+}
+
+function toHierarchyData(data: MindMapInput): MindMapNode {
+  if (isMindmapV2(data)) {
+    return mindmapV2ToHierarchy(data) as MindMapNode;
+  }
+  return data as MindMapNode;
+}
+
 interface MindMapVisualizationProps {
-  data: MindMapNode;
+  data: MindMapInput;
   width?: number;
   height?: number;
   onNodeUpdate?: (nodeId: string, data: { name: string; image?: string }) => void;
   onNodeDelete?: (nodeId: string) => void;
   onNodeAdd?: (parentId: string, nodeName: string) => void;
   onPositionUpdate?: (updatedStructure: MindMapNode) => void;
+  onMindmapUpdate?: (updatedMindmap: MindmapV2) => void;
 }
 
 type LayoutType = 'radial' | 'tree' | 'horizontal';
@@ -36,20 +50,23 @@ export default function MindMapVisualization({
   onNodeUpdate,
   onNodeDelete,
   onNodeAdd,
-  onPositionUpdate
+  onPositionUpdate,
+  onMindmapUpdate
 }: MindMapVisualizationProps) {
+  const feedback = useFeedback();
   const svgRef = useRef<SVGSVGElement>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const gRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [editingNode, setEditingNode] = useState<MindMapNode | null>(null);
-  const [mindmapData, setMindmapData] = useState<MindMapNode>(data);
+  const [mindmapData, setMindmapData] = useState<MindMapNode>(() => toHierarchyData(data));
   const [showAddNodeModal, setShowAddNodeModal] = useState<string | null>(null);
   const [newNodeName, setNewNodeName] = useState('');
   const [allNodes, setAllNodes] = useState<MindMapNode[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [layout, setLayout] = useState<LayoutType>('radial');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [dragModeEnabled, setDragModeEnabled] = useState(false);
   const draggedNodeRef = useRef<{ id: string; startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
   const linksRef = useRef<any>(null);
   const nodesRef = useRef<any>(null);
@@ -113,8 +130,14 @@ export default function MindMapVisualization({
   }, [width, height]);
 
   useEffect(() => {
-    setMindmapData(data);
+    setMindmapData(toHierarchyData(data));
   }, [data]);
+
+  useEffect(() => {
+    if (!dragModeEnabled) {
+      setIsDragging(false);
+    }
+  }, [dragModeEnabled]);
 
   // 선택된 노드 시각적 하이라이트 업데이트
   useEffect(() => {
@@ -157,10 +180,18 @@ export default function MindMapVisualization({
           e.preventDefault();
           // 루트 노드는 삭제 불가
           if (selectedNode !== mindmapData.id && selectedNode !== 'root') {
-            if (confirm('이 노드를 삭제하시겠습니까?')) {
+            void (async () => {
+              const confirmed = await feedback.confirm({
+                title: '노드를 삭제할까요?',
+                description: '연결된 하위 노드도 함께 삭제됩니다.',
+                confirmText: '삭제',
+                cancelText: '취소',
+                destructive: true,
+              });
+              if (!confirmed) return;
               handleNodeDelete(selectedNode);
               setSelectedNode(null);
-            }
+            })();
           }
           break;
         case 'ArrowUp':
@@ -214,7 +245,7 @@ export default function MindMapVisualization({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNode, allNodes, showAddNodeModal, editingNode, mindmapData]);
+  }, [selectedNode, allNodes, showAddNodeModal, editingNode, mindmapData, feedback]);
 
   // 노드 찾기 헬퍼 함수
   const findNodeById = (root: MindMapNode, targetId: string): MindMapNode | null => {
@@ -244,6 +275,50 @@ export default function MindMapVisualization({
     return null;
   };
 
+  const selectedNodeData = selectedNode ? findNodeById(mindmapData, selectedNode) : null;
+  const canDeleteSelectedNode = Boolean(
+    selectedNodeData && selectedNodeData.id !== 'root' && selectedNodeData.id !== mindmapData.id
+  );
+
+  const openQuickAddNode = () => {
+    if (!selectedNode) {
+      feedback.info('먼저 기준이 될 부모 노드를 선택하세요.');
+      return;
+    }
+    setShowAddNodeModal(selectedNode);
+  };
+
+  const openQuickEditNode = () => {
+    if (!selectedNodeData) {
+      feedback.info('먼저 편집할 노드를 선택하세요.');
+      return;
+    }
+    setEditingNode(selectedNodeData);
+  };
+
+  const openQuickDeleteNode = async () => {
+    if (!selectedNodeData) {
+      feedback.info('먼저 삭제할 노드를 선택하세요.');
+      return;
+    }
+    if (!canDeleteSelectedNode) {
+      feedback.warning('루트 노드는 삭제할 수 없습니다.');
+      return;
+    }
+
+    const confirmed = await feedback.confirm({
+      title: '노드를 삭제할까요?',
+      description: '연결된 하위 노드도 함께 삭제됩니다.',
+      confirmText: '삭제',
+      cancelText: '취소',
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    handleNodeDelete(selectedNodeData.id);
+    setSelectedNode(null);
+  };
+
   const handleNodeSave = (nodeId: string, updatedData: { name: string; image?: string }) => {
     // Call the parent's onNodeUpdate
     if (onNodeUpdate) {
@@ -263,7 +338,11 @@ export default function MindMapVisualization({
   };
 
   const handleAddNode = () => {
-    if (!showAddNodeModal || !newNodeName.trim()) return;
+    if (!showAddNodeModal) return;
+    if (!newNodeName.trim()) {
+      feedback.warning('노드 이름을 입력하세요.');
+      return;
+    }
 
     // Call the parent's onNodeAdd
     if (onNodeAdd) {
@@ -358,7 +437,7 @@ export default function MindMapVisualization({
         const pos = getNodePosition(d);
         return `translate(${pos.x},${pos.y})`;
       })
-      .style('cursor', 'move')
+      .style('cursor', dragModeEnabled ? 'move' : 'pointer')
       .on('click', function(event, d: any) {
         event.stopPropagation();
         const clickedNodeId = d.data.id;
@@ -391,6 +470,7 @@ export default function MindMapVisualization({
       })
       .call(d3.drag<SVGGElement, any>()
         .on('start', function(event, d: any) {
+          if (!dragModeEnabled) return;
           setIsDragging(true);
           d3.select(this).raise();
           setSelectedNode(d.data.id);
@@ -426,6 +506,7 @@ export default function MindMapVisualization({
             .style('filter', 'drop-shadow(0 0 8px #10b981)');
         })
         .on('drag', function(event, d: any) {
+          if (!dragModeEnabled) return;
           // Calculate new position with offset correction
           const newX = event.x - (draggedNodeRef.current?.offsetX || 0);
           const newY = event.y - (draggedNodeRef.current?.offsetY || 0);
@@ -454,6 +535,7 @@ export default function MindMapVisualization({
           });
         })
         .on('end', function(event, d: any) {
+          if (!dragModeEnabled) return;
           setIsDragging(false);
 
           // Calculate final position with offset correction
@@ -480,6 +562,9 @@ export default function MindMapVisualization({
           // Notify parent component to save changes
           if (onPositionUpdate) {
             onPositionUpdate(updatedStructure);
+          }
+          if (onMindmapUpdate) {
+            onMindmapUpdate(hierarchyToMindmapV2(updatedStructure));
           }
 
           // Restore normal highlight
@@ -587,7 +672,7 @@ export default function MindMapVisualization({
       setZoomLevel(1);
     });
 
-  }, [mindmapData, width, height, layout]);
+  }, [mindmapData, width, height, layout, dragModeEnabled]);
 
   return (
     <div className="relative w-full">
@@ -635,6 +720,52 @@ export default function MindMapVisualization({
         </div>
       </div>
 
+      {/* Node Quick Actions */}
+      <div className="absolute top-4 right-14 bg-white/90 backdrop-blur p-2 rounded-lg shadow-md w-56">
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-semibold text-gray-700">선택 노드</div>
+          <button
+            onClick={() => setDragModeEnabled((prev) => !prev)}
+            className={`px-2 py-0.5 text-[10px] rounded ${
+              dragModeEnabled
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-slate-100 text-slate-600'
+            }`}
+            title="노드 배치 이동 모드 전환"
+          >
+            배치 이동 {dragModeEnabled ? 'ON' : 'OFF'}
+          </button>
+        </div>
+        <p className="mt-1 truncate text-xs text-gray-600">
+          {selectedNodeData ? selectedNodeData.name : '없음'}
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          <button
+            onClick={openQuickAddNode}
+            className="rounded bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+            title="하위 노드 추가"
+          >
+            + 하위
+          </button>
+          <button
+            onClick={openQuickEditNode}
+            disabled={!selectedNodeData}
+            className="rounded bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+            title="선택 노드 편집"
+          >
+            편집
+          </button>
+          <button
+            onClick={() => void openQuickDeleteNode()}
+            disabled={!canDeleteSelectedNode}
+            className="rounded bg-rose-50 px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+            title="선택 노드 삭제"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+
       {/* Help Toggle Button */}
       <button
         onClick={() => setShowHelp(!showHelp)}
@@ -650,10 +781,11 @@ export default function MindMapVisualization({
           <div className="font-semibold mb-2 text-gray-900">⌨️ 컨트롤</div>
           <div className="space-y-1 text-xs">
             <div className="font-medium text-gray-700">마우스</div>
-            <div>• 드래그: 화면/노드 이동</div>
+            <div>• 드래그: 화면 이동</div>
+            <div>• 노드 드래그: 배치 이동 ON 상태에서만</div>
             <div>• 스크롤: 확대/축소</div>
             <div>• 클릭: 선택 | 더블클릭: 편집</div>
-            <div>• 우클릭: 하위 노드 추가</div>
+            <div>• 우클릭 또는 우측 액션: 하위 노드 추가</div>
             <div className="font-medium text-gray-700 mt-2">키보드</div>
             <div>• ↑↓←→: 노드 탐색</div>
             <div>• Enter: 편집 | +: 추가</div>
@@ -686,7 +818,7 @@ export default function MindMapVisualization({
                   type="text"
                   value={newNodeName}
                   onChange={(e) => setNewNodeName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAddNode()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddNode()}
                   placeholder="노드 이름을 입력하세요"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
                   autoFocus

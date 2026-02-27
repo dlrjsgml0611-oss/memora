@@ -47,7 +47,7 @@ export default function LoginPage() {
       const response: any = await api.login(email, password)
 
       if (response.success) {
-        login(response.data.token, response.data.user)
+        login(response.data.user)
         router.push('/dashboard')
       } else {
         setError(response.error || '로그인에 실패했습니다')

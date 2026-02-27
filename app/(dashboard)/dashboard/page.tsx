@@ -3,19 +3,22 @@
 import { useEffect, useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { api } from '@/lib/api/client';
 import { useAuthStore } from '@/store/authStore';
 import {
   BookOpen, GraduationCap, Brain, Flame, Clock, TrendingUp,
-  Sparkles, ArrowRight, Lightbulb, Target, Zap
+  Sparkles, ArrowRight, Lightbulb, Target, Zap, ListTodo, Swords, ShieldAlert,
+  CheckCircle2, CircleDot
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const [stats, setStats] = useState<any>(null);
   const [dueCards, setDueCards] = useState<any>(null);
+  const [todayMission, setTodayMission] = useState<any>(null);
+  const [todayReviews, setTodayReviews] = useState(0);
+  const [dailyTarget, setDailyTarget] = useState(20);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,12 +27,22 @@ export default function DashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const [userResponse, dueCardsResponse] = await Promise.all([
+      const [userResponse, dueCardsResponse, todayMissionResponse] = await Promise.all([
         api.getMe(),
         api.getDueFlashcards(false, 0),
+        api.getTodayStudyMission(),
       ]);
-      if (userResponse.success) setStats(userResponse.data.stats);
+      if (userResponse.success) {
+        setStats(userResponse.data.stats);
+        setDailyTarget(userResponse.data.preferences?.dailyReviewTarget || 20);
+      }
       if (dueCardsResponse.success) setDueCards(dueCardsResponse.data);
+      if (todayMissionResponse.success) {
+        const mission = todayMissionResponse.data;
+        setTodayMission(mission);
+        setTodayReviews(mission.todayReviews || 0);
+        setDailyTarget(mission.dailyTarget || 20);
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -62,6 +75,137 @@ export default function DashboardPage() {
           <div className="absolute -right-8 -bottom-8 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
           <div className="absolute right-20 top-4 w-24 h-24 bg-white/10 rounded-full blur-xl" />
         </div>
+
+        {/* Daily Goal Progress */}
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-800">오늘의 목표</h3>
+                  <p className="text-sm text-slate-500">일일 복습 진행률</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-slate-800">
+                  {todayReviews} <span className="text-lg text-slate-400">/ {dailyTarget}</span>
+                </div>
+                <p className="text-sm text-slate-500">
+                  {todayReviews >= dailyTarget ? '🎉 목표 달성!' : `${dailyTarget - todayReviews}개 남음`}
+                </p>
+              </div>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-3 rounded-full transition-all duration-500 ${
+                  todayReviews >= dailyTarget
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                    : 'bg-gradient-to-r from-blue-500 to-indigo-500'
+                }`}
+                style={{ width: `${Math.min((todayReviews / dailyTarget) * 100, 100)}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Learning Loop */}
+        {todayMission?.learningLoop?.steps?.length > 0 && (
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Target className="w-5 h-5 text-indigo-500" />
+                학습 루프
+              </CardTitle>
+              <CardDescription>
+                복습 → 약점 보강 → 기억의 궁전 → 시험 모드 순서로 하루 학습을 완성합니다
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-2 rounded-full bg-gradient-to-r from-indigo-500 to-blue-500 transition-all duration-500"
+                  style={{
+                    width: `${
+                      Math.round(
+                        (todayMission.learningLoop.completedSteps / Math.max(todayMission.learningLoop.totalSteps, 1)) * 100
+                      )
+                    }%`,
+                  }}
+                />
+              </div>
+
+              {todayMission.learningLoop.steps.map((step: any, index: number) => {
+                const isCurrent = !step.completed && todayMission.learningLoop.currentStep === step.key;
+                return (
+                  <Link key={step.key} href={step.href}>
+                    <div
+                      className={`rounded-xl border p-4 transition-colors ${
+                        step.completed
+                          ? 'border-emerald-200 bg-emerald-50'
+                          : isCurrent
+                          ? 'border-indigo-300 bg-indigo-50'
+                          : 'border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center bg-white border border-slate-200">
+                            {step.completed ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            ) : (
+                              <span className="text-xs font-semibold text-slate-700">{index + 1}</span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-800">{step.label}</p>
+                            <p className="text-sm text-slate-500 mt-0.5">{step.description}</p>
+                          </div>
+                        </div>
+                        {isCurrent && (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 bg-indigo-100 px-2 py-1 rounded-full">
+                            <CircleDot className="w-3 h-3" />
+                            현재 단계
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Today Mission */}
+        {todayMission?.recommendedActions?.length > 0 && (
+          <Card className="border-0 shadow-lg">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ListTodo className="w-5 h-5 text-blue-500" />
+                오늘의 학습 미션
+              </CardTitle>
+              <CardDescription>
+                현재 상태를 기준으로 다음 행동을 자동 추천합니다
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {todayMission.recommendedActions.map((action: any, index: number) => (
+                <Link key={`${action.type}-${index}`} href={action.href}>
+                  <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 p-4 hover:bg-slate-50 transition-colors">
+                    <div>
+                      <p className="font-semibold text-slate-800">{index + 1}. {action.label}</p>
+                      <p className="text-sm text-slate-500 mt-0.5">{action.description}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -157,6 +301,41 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <ArrowRight className="absolute right-6 bottom-6 w-5 h-5 text-slate-300 group-hover:text-violet-500 group-hover:translate-x-1 transition-all" />
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+
+        {/* Practice Modes */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Link href="/review?mode=exam&count=30" className="group">
+            <Card className="h-full border-0 shadow-lg shadow-rose-500/5 hover:shadow-xl hover:shadow-rose-500/10 transition-all duration-300 overflow-hidden">
+              <CardContent className="p-6 relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-rose-50 to-orange-50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center mb-4 shadow-lg shadow-rose-500/30 group-hover:scale-110 transition-transform">
+                    <Swords className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-1">시험 모드</h3>
+                  <p className="text-sm text-slate-500 mb-3">시간 제한 실전 연습으로 집중력 강화</p>
+                </div>
+                <ArrowRight className="absolute right-6 bottom-6 w-5 h-5 text-slate-300 group-hover:text-rose-500 group-hover:translate-x-1 transition-all" />
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/weakness" className="group">
+            <Card className="h-full border-0 shadow-lg shadow-amber-500/5 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
+              <CardContent className="p-6 relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-amber-50 to-yellow-50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative z-10">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-500 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
+                    <ShieldAlert className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-800 mb-1">약점 훈련</h3>
+                  <p className="text-sm text-slate-500 mb-3">최근 오답 패턴 중심으로 취약 주제 보강</p>
+                </div>
+                <ArrowRight className="absolute right-6 bottom-6 w-5 h-5 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
               </CardContent>
             </Card>
           </Link>
